@@ -1,0 +1,20 @@
+{
+  "name": "capillary-playground",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Capillary Playground — company game site with leaderboard",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "vercel dev",
+    "build": "echo 'No build step needed'",
+    "deploy": "vercel --prod"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^0.10.4",
+    "dotenv": "^16.6.1"
+  },
+  "devDependencies": {
+    "vercel": "^39.0.0"
+  }
+}

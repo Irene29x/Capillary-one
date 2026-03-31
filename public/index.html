@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Capillary Playground — #One Capillary</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <div id="app">
+
+    <!-- AMBIENT BG ORBS -->
+    <div class="bg-orb bg-orb-1"></div>
+    <div class="bg-orb bg-orb-2"></div>
+    <div class="bg-orb bg-orb-3"></div>
+
+    <!-- HEADER -->
+    <header class="site-header">
+      <div class="header-inner">
+        <div class="header-brand">
+          <div class="logo-wrap">
+            <img id="header-logo" class="header-logo" alt="Capillary" />
+          </div>
+          <div class="header-text">
+            <span class="header-title">Capillary Playground</span>
+            <span class="header-tag">#One Capillary</span>
+          </div>
+        </div>
+        <nav class="header-nav">
+          <button class="nav-btn active" data-section="arcade">🎮 Games</button>
+          <button class="nav-btn" data-section="leaderboard">🏆 Leaderboard</button>
+          <button class="nav-btn" data-section="players">👥 Players</button>
+        </nav>
+      </div>
+    </header>
+
+    <!-- TICKER -->
+    <div class="ticker-bar">
+      <div class="ticker-track" id="ticker-track">
+        <span class="ticker-content" id="ticker-text">
+          🏆 Top Scorer: — &nbsp;·&nbsp; Games Played: 0 &nbsp;·&nbsp; #One Capillary &nbsp;·&nbsp; Ready to play? Choose your game below! &nbsp;·&nbsp;
+        </span>
+        <span class="ticker-content" aria-hidden="true" id="ticker-text-clone">
+          🏆 Top Scorer: — &nbsp;·&nbsp; Games Played: 0 &nbsp;·&nbsp; #One Capillary &nbsp;·&nbsp; Ready to play? Choose your game below! &nbsp;·&nbsp;
+        </span>
+      </div>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <main class="main-content">
+
+      <!-- ARCADE SECTION -->
+      <section id="sec-arcade" class="section visible">
+        <div class="section-header">
+          <h2 class="section-title">Choose Your Game</h2>
+          <p class="section-sub">Pick a challenge, set a record, claim your glory.</p>
+        </div>
+
+        <div class="stats-row">
+          <div class="stat-pill">
+            <span class="stat-pill-icon">🎮</span>
+            <div>
+              <span class="stat-pill-label">Total Plays</span>
+              <span class="stat-pill-val" id="stat-plays-val">0</span>
+            </div>
+          </div>
+          <div class="stat-pill">
+            <span class="stat-pill-icon">🥇</span>
+            <div>
+              <span class="stat-pill-label">Top Player</span>
+              <span class="stat-pill-val" id="stat-top-val">—</span>
+            </div>
+          </div>
+          <div class="stat-pill">
+            <span class="stat-pill-icon">🏢</span>
+            <div>
+              <span class="stat-pill-label">Leading Team</span>
+              <span class="stat-pill-val" id="stat-team-val">—</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="arcade-grid">
+
+          <div class="game-card" data-game="cashflow">
+            <div class="game-card-glow"></div>
+            <div class="game-card-inner">
+              <div class="game-icon-wrap logo-icon">
+                <img class="card-logo-img" alt="Capillary" />
+              </div>
+              <h3 class="game-name">Cashflow Chase</h3>
+              <p class="game-desc">Navigate the maze as the Capillary logo. Collect 💰 tokens, dodge ❌ enemies. A Capillary classic.</p>
+              <div class="game-meta">
+                <span class="game-hs-label">Best Score</span>
+                <span class="game-hs-val" id="hs-cashflow">—</span>
+              </div>
+              <button class="play-btn">Play Now</button>
+            </div>
+          </div>
+
+          <div class="game-card" data-game="reaction">
+            <div class="game-card-glow"></div>
+            <div class="game-card-inner">
+              <div class="game-icon-wrap">
+                <span class="game-icon">⚡</span>
+              </div>
+              <h3 class="game-name">Trigger Time</h3>
+              <p class="game-desc">Wait for the flash, click instantly. 5 rounds of pure reflex. Your average reaction time is your rank.</p>
+              <div class="game-meta">
+                <span class="game-hs-label">Best Score</span>
+                <span class="game-hs-val" id="hs-reaction">—</span>
+              </div>
+              <button class="play-btn">Play Now</button>
+            </div>
+          </div>
+
+          <div class="game-card" data-game="memory">
+            <div class="game-card-glow"></div>
+            <div class="game-card-inner">
+              <div class="game-icon-wrap">
+                <span class="game-icon">🃏</span>
+              </div>
+              <h3 class="game-name">Match Matrix</h3>
+              <p class="game-desc">Flip cards, find pairs. Your memory under pressure will be tested — fewer moves means a higher score.</p>
+              <div class="game-meta">
+                <span class="game-hs-label">Best Score</span>
+                <span class="game-hs-val" id="hs-memory">—</span>
+              </div>
+              <button class="play-btn">Play Now</button>
+            </div>
+          </div>
+
+          <div class="game-card" data-game="mines">
+            <div class="game-card-glow"></div>
+            <div class="game-card-inner">
+              <div class="game-icon-wrap">
+                <span class="game-icon">💣</span>
+              </div>
+              <h3 class="game-name">Risk vs Reward</h3>
+              <p class="game-desc">Reveal safe tiles, avoid ❌ bombs, find the 💰 jackpot. Each safe click multiplies your reward.</p>
+              <div class="game-meta">
+                <span class="game-hs-label">Best Score</span>
+                <span class="game-hs-val" id="hs-mines">—</span>
+              </div>
+              <button class="play-btn">Play Now</button>
+            </div>
+          </div>
+
+          <div class="game-card game-card--wide" data-game="timing">
+            <div class="game-card-glow"></div>
+            <div class="game-card-inner">
+              <div class="game-icon-wrap">
+                <span class="game-icon">🚀</span>
+              </div>
+              <h3 class="game-name">Campaign Launch</h3>
+              <p class="game-desc">A bar oscillates across the screen. Stop it in the target zone at the perfect moment to maximize your launch score.</p>
+              <div class="game-meta">
+                <span class="game-hs-label">Best Score</span>
+                <span class="game-hs-val" id="hs-timing">—</span>
+              </div>
+              <button class="play-btn">Play Now</button>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- LEADERBOARD SECTION -->
+      <section id="sec-leaderboard" class="section">
+        <div class="section-header">
+          <h2 class="section-title">Leaderboard</h2>
+          <p class="section-sub">Rankings update after every game. Be the one on top.</p>
+        </div>
+
+        <div class="board-tabs">
+          <button class="board-tab active" data-board="individual">Individual</button>
+          <button class="board-tab" data-board="team">By Team</button>
+          <button class="board-tab" data-board="overall">Overall</button>
+        </div>
+
+        <div class="board-filters">
+          <select id="game-filter" class="filter-select">
+            <option value="">All Games</option>
+            <option value="pacman">Cashflow Chase</option>
+            <option value="reaction">Trigger Time</option>
+            <option value="memory">Match Matrix</option>
+            <option value="mines">Risk vs Reward</option>
+            <option value="timing">Campaign Launch</option>
+          </select>
+          <div class="period-btns">
+            <button class="period-btn" data-period="today">Today</button>
+            <button class="period-btn" data-period="week">This Week</button>
+            <button class="period-btn active" data-period="all">All Time</button>
+          </div>
+        </div>
+
+        <div id="board-individual" class="board-panel active">
+          <div class="board-table-wrap">
+            <table class="board-table">
+              <thead>
+                <tr>
+                  <th class="col-rank">#</th>
+                  <th>Player</th>
+                  <th>Team</th>
+                  <th>Game</th>
+                  <th class="col-score">Score</th>
+                </tr>
+              </thead>
+              <tbody id="individual-rows">
+                <tr><td colspan="5" class="empty-row">No scores yet — be the first to play!</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="board-team" class="board-panel">
+          <div class="board-table-wrap">
+            <table class="board-table">
+              <thead>
+                <tr>
+                  <th class="col-rank">#</th>
+                  <th>Team</th>
+                  <th>Players</th>
+                  <th class="col-score">Total Score</th>
+                  <th class="col-score">Avg Score</th>
+                </tr>
+              </thead>
+              <tbody id="team-rows">
+                <tr><td colspan="5" class="empty-row">No team data yet</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="board-overall" class="board-panel">
+          <div class="board-table-wrap">
+            <table class="board-table">
+              <thead>
+                <tr>
+                  <th class="col-rank">#</th>
+                  <th>Player</th>
+                  <th>Team</th>
+                  <th>Games</th>
+                  <th class="col-score">Composite</th>
+                </tr>
+              </thead>
+              <tbody id="overall-rows">
+                <tr><td colspan="5" class="empty-row">No data yet</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+      <section id="sec-players" class="section">
+        <div class="section-header">
+          <h2 class="section-title">All Players</h2>
+          <p class="section-sub">Everyone who has played, ranked by total score.</p>
+        </div>
+        <div class="player-grid" id="player-grid">
+          <p class="empty-note">No players yet. Play a game to appear here!</p>
+        </div>
+      </section>
+
+    </main>
+
+    <footer class="site-footer">
+      <span>Created by CAP-3457</span>
+      <span class="footer-dot">·</span>
+      <span>#One Capillary</span>
+    </footer>
+
+    <!-- ===================== MODALS ===================== -->
+
+    <!-- PLAYER NAME MODAL -->
+    <div id="name-modal" class="modal-overlay" role="dialog" aria-modal="true">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div class="modal-icon">🎮</div>
+          <h3 class="modal-title">Who's Playing?</h3>
+          <p class="modal-sub">Enter your details to track your score on the leaderboard.</p>
+        </div>
+        <div class="modal-body">
+          <div class="form-field">
+            <label class="form-label" for="player-name-input">Your Name</label>
+            <input id="player-name-input" class="form-input" type="text" placeholder="Enter your name" maxlength="20" autocomplete="off" />
+          </div>
+          <div class="form-field">
+            <label class="form-label" for="player-team-input">Your Team</label>
+            <select id="player-team-input" class="form-select">
+              <option value="">— Select your team —</option>
+              <option value="Marketing">Marketing</option>
+              <option value="Sales">Sales</option>
+              <option value="Tech">Tech</option>
+              <option value="Product">Product</option>
+              <option value="Facets">Facets</option>
+              <option value="HR">HR</option>
+              <option value="Legal">Legal</option>
+              <option value="Infosec">Infosec</option>
+              <option value="Finance">Finance</option>
+              <option value="Customer Support">Customer Support</option>
+              <option value="Others">Others</option>
+            </select>
+          </div>
+          <div class="form-field" id="custom-team-field" style="display:none;">
+            <label class="form-label" for="custom-team-input">Team Name</label>
+            <input id="custom-team-input" class="form-input" type="text" placeholder="Enter your team name" maxlength="30" />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="confirm-name-btn" class="btn-primary">Start Playing →</button>
+          <button id="skip-name-btn" class="btn-ghost">Play as Guest</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- INSTRUCTIONS MODAL -->
+    <div id="game-instructions" class="modal-overlay" role="dialog" aria-modal="true">
+      <div class="modal-card modal-card--instructions">
+        <div class="modal-header">
+          <div class="inst-icon" id="inst-icon">🎯</div>
+          <h3 class="modal-title" id="inst-title">Game Title</h3>
+        </div>
+        <div class="modal-body">
+          <p class="inst-desc" id="inst-desc">Game description.</p>
+          <div class="inst-controls-box">
+            <span class="inst-controls-label">Controls</span>
+            <span class="inst-controls" id="inst-controls">—</span>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="start-game-btn" class="btn-primary">Let's Go! →</button>
+          <button id="cancel-inst-btn" class="btn-ghost">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- GAME AREA OVERLAY -->
+    <div id="game-area" class="game-overlay">
+      <div class="game-overlay-inner">
+        <div class="game-hud">
+          <div class="game-hud-left">
+            <button id="close-game-btn" class="hud-btn hud-btn--close">✕ Exit</button>
+            <span class="hud-game-title" id="game-title">Game</span>
+          </div>
+          <div class="game-hud-center" id="hud-center"></div>
+          <div class="game-hud-right">
+            <span class="hud-score-label">Score</span>
+            <span class="hud-score" id="game-score-display">0</span>
+          </div>
+        </div>
+
+        <div class="game-canvas-wrap" id="game-canvas-wrap">
+          <canvas id="game-canvas"></canvas>
+
+          <!-- DOM GAME LAYERS -->
+          <div id="dom-game-layer" style="display:none;"></div>
+
+          <!-- GAME OVER PANEL -->
+          <div id="game-over" class="game-over-panel" style="display:none;">
+            <div class="go-inner">
+              <div class="go-emoji" id="go-emoji">🎉</div>
+              <p class="go-label" id="go-label">Game Over</p>
+              <span class="go-score" id="final-score">0</span>
+              <p class="go-sub" id="go-sub"></p>
+              <div class="go-actions">
+                <button id="replay-btn" class="btn-primary">Play Again</button>
+                <button id="save-close-btn" class="btn-secondary">Save & Exit</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- #app -->
+
+  <script src="games.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
