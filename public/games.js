@@ -731,7 +731,15 @@ GAME_ENGINES.timing = (function () {
     state.zone.style.width  = (state.zoneWidth * 100) + '%';
 
     btn.addEventListener('click', handleClick);
+    document.addEventListener('keydown', handleKey);
     animate();
+  }
+
+  function handleKey(e) {
+    if (e.code === 'Space' || e.key === ' ') {
+      e.preventDefault();
+      handleClick();
+    }
   }
 
   function animate() {
@@ -795,6 +803,7 @@ GAME_ENGINES.timing = (function () {
   function destroy() {
     state && (state.running = false);
     if (animId) cancelAnimationFrame(animId);
+    document.removeEventListener('keydown', handleKey);
     if (container && container.parentNode) container.parentNode.removeChild(container);
     document.getElementById('game-canvas').style.display = 'block';
     state = null;

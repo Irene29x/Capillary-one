@@ -52,7 +52,7 @@ const GAMES_META = {
     name: 'Campaign Launch',
     icon: '🚀',
     desc: 'A bar oscillates across the screen. Stop it in the green zone at the perfect moment to maximize your launch score.',
-    controls: 'Click LAUNCH button — stop the bar in the zone',
+    controls: 'Press SPACEBAR or click LAUNCH — stop the bar in the zone',
     scoreLabel: 'Score',
   },
 };
@@ -216,8 +216,8 @@ function updateTicker() {
   const sorted = [...State.scores].sort((a,b) => b.score - a.score);
   const top = sorted[0];
   const text = top
-    ? `🏆 Top Scorer: ${top.name} (${top.score.toLocaleString()} pts) ${Array(3).fill('&nbsp;·&nbsp;').join('')} Games Played: ${State.scores.length} &nbsp;·&nbsp; #One Capillary &nbsp;·&nbsp; Who's next? &nbsp;·&nbsp;`
-    : `🏆 Top Scorer: — &nbsp;·&nbsp; Games Played: 0 &nbsp;·&nbsp; #One Capillary &nbsp;·&nbsp; Ready to play? Choose your game below! &nbsp;·&nbsp;`;
+    ? `🏆 Top Scorer: ${top.name} (${top.score.toLocaleString()} pts) ${Array(3).fill('&nbsp;·&nbsp;').join('')} Games Played: ${State.scores.length} &nbsp;·&nbsp; #OneCapillary &nbsp;·&nbsp; Who's next? &nbsp;·&nbsp;`
+    : `🏆 Top Scorer: — &nbsp;·&nbsp; Games Played: 0 &nbsp;·&nbsp; #OneCapillary &nbsp;·&nbsp; Ready to play? Choose your game below! &nbsp;·&nbsp;`;
   [$('ticker-text'), $('ticker-text-clone')].forEach(el => {
     if (el) el.innerHTML = text;
   });
@@ -426,7 +426,13 @@ function confirmName() {
   if (!team) { $('player-team-input').focus(); return; }
   if (team === 'Others') {
     const custom = $('custom-team-input').value.trim();
-    if (custom) team = custom;
+    if (!custom) {
+      $('custom-team-input').focus();
+      $('custom-team-input').style.borderColor = 'var(--red)';
+      $('custom-team-input').setAttribute('placeholder', 'Please enter a team name');
+      return;
+    }
+    team = custom;
   }
   State.playerName = name;
   State.playerTeam = team;
@@ -469,7 +475,7 @@ function bindGameHud() {
     startGame(State.currentGame);
   });
   $('save-close-btn').addEventListener('click', async () => {
-    if (State.currentScore > 0 && State.playerName) {
+    if (State.currentScore > 0 && State.playerName && State.playerName !== 'Guest') {
       await addScore(State.playerName, State.playerTeam, State.currentGame, State.currentScore);
       renderLeaderboard();
     }
@@ -534,8 +540,8 @@ function showGameOver(won, score) {
   panel.style.animation = 'none';
   setTimeout(() => panel.style.animation = '', 10);
 
-  // Auto-save score
-  if (score > 0 && State.playerName) {
+  // Auto-save score (skip Guests)
+  if (score > 0 && State.playerName && State.playerName !== 'Guest') {
     addScore(State.playerName, State.playerTeam, State.currentGame, score).then(() => renderLeaderboard());
   }
 }
