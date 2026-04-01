@@ -61,7 +61,7 @@ GAME_ENGINES.cashflow = (function () {
       map,
       totalCoins,
       coinsLeft: totalCoins,
-      player: { c: 10, r: 16, dx: 0, dy: 0, px: 10*TILE, py: 16*TILE, speed: 2, moving: false },
+      player: { c: 10, r: 16, dx: 0, dy: 0, px: 10*TILE, py: 16*TILE, speed: 8, moving: false },
       enemies: [
         { c: 9,  r: 9,  px: 9*TILE,  py: 9*TILE,  dx: 1, dy: 0, color: '#ff4545', move: 0 },
         { c: 11, r: 9,  px: 11*TILE, py: 9*TILE,  dx: -1,dy: 0, color: '#a855f7', move: 0 },

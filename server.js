@@ -8,8 +8,9 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
 
-// Import the API handler
+// Import the API handlers
 const { default: scoresHandler } = await import('./api/scores.js');
+const { default: authHandler } = await import('./api/auth.js');
 
 const MIME = {
   '.html': 'text/html',
@@ -66,14 +67,15 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`);
 
   // API routes
-  if (url.pathname.startsWith('/api/scores')) {
+  if (url.pathname.startsWith('/api/scores') || url.pathname.startsWith('/api/auth')) {
+    const handler = url.pathname.startsWith('/api/auth') ? authHandler : scoresHandler;
     let body = '';
     req.on('data', chunk => { body += chunk; });
     req.on('end', async () => {
       try {
         const vReq = createVercelReq(req, body || null, url);
         const vRes = createVercelRes(res);
-        await scoresHandler(vReq, vRes);
+        await handler(vReq, vRes);
       } catch (err) {
         console.error('API error:', err);
         res.writeHead(500, { 'Content-Type': 'application/json' });

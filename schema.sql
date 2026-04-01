@@ -1,6 +1,13 @@
 -- Capillary Playground — Neon PostgreSQL Schema
 -- Run this once in Neon SQL Editor (console.neon.tech)
 
+CREATE TABLE IF NOT EXISTS users (
+  id         SERIAL PRIMARY KEY,
+  name       VARCHAR(20) NOT NULL UNIQUE,
+  team       VARCHAR(30) NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS scores (
   id         SERIAL PRIMARY KEY,
   name       VARCHAR(20) NOT NULL,

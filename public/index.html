@@ -6,7 +6,8 @@
   <title>Capillary Playground — #OneCapillary</title>
   <link rel="stylesheet" href="styles.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Racing+Sans+One&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
 </head>
 <body>
   <div id="app">
@@ -33,6 +34,10 @@
           <button class="nav-btn" data-section="leaderboard">🏆 Leaderboard</button>
           <button class="nav-btn" data-section="players">👥 Players</button>
         </nav>
+        <div class="header-user" id="header-user" style="display:none;">
+          <span class="header-user-name" id="header-user-name"></span>
+          <button class="btn-ghost btn-sm" id="logout-btn">Log out</button>
+        </div>
       </div>
     </header>
 
@@ -60,9 +65,9 @@
 
         <div class="stats-row">
           <div class="stat-pill">
-            <span class="stat-pill-icon">🎮</span>
+            <span class="stat-pill-icon">👥</span>
             <div>
-              <span class="stat-pill-label">Total Plays</span>
+              <span class="stat-pill-label">Total Players</span>
               <span class="stat-pill-val" id="stat-plays-val">0</span>
             </div>
           </div>
@@ -273,20 +278,21 @@
 
     <!-- ===================== MODALS ===================== -->
 
-    <!-- PLAYER NAME MODAL -->
+    <!-- LOGIN MODAL -->
     <div id="name-modal" class="modal-overlay" role="dialog" aria-modal="true">
       <div class="modal-card">
         <div class="modal-header">
           <div class="modal-icon">🎮</div>
           <h3 class="modal-title">Who's Playing?</h3>
-          <p class="modal-sub">Enter your details to track your score on the leaderboard.</p>
+          <p class="modal-sub">Enter a unique username to save your scores. If you've played before, use the same name to continue your leaderboard.</p>
         </div>
         <div class="modal-body">
+          <div id="auth-error" class="auth-error" style="display:none;"></div>
           <div class="form-field">
-            <label class="form-label" for="player-name-input">Your Name</label>
-            <input id="player-name-input" class="form-input" type="text" placeholder="Enter your name" maxlength="20" autocomplete="off" />
+            <label class="form-label" for="player-name-input">Username</label>
+            <input id="player-name-input" class="form-input" type="text" placeholder="Pick a unique username" maxlength="20" autocomplete="off" />
           </div>
-          <div class="form-field">
+          <div class="form-field" id="team-field">
             <label class="form-label" for="player-team-input">Your Team</label>
             <select id="player-team-input" class="form-select">
               <option value="">— Select your team —</option>
@@ -309,7 +315,7 @@
           </div>
         </div>
         <div class="modal-footer">
-          <button id="confirm-name-btn" class="btn-primary">Start Playing →</button>
+          <button id="confirm-name-btn" class="btn-primary">Let's Play →</button>
           <button id="skip-name-btn" class="btn-ghost">Play as Guest</button>
         </div>
       </div>

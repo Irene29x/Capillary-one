@@ -179,7 +179,9 @@ function bindBoardTabs() {
 
 // ── Stats ─────────────────────────────────────────────────────
 function updateStats() {
-  $('stat-plays-val').textContent = State.scores.length;
+  // Count unique players
+  const uniquePlayers = new Set(State.scores.map(s => s.name));
+  $('stat-plays-val').textContent = uniquePlayers.size;
 
   if (State.scores.length === 0) {
     $('stat-top-val').textContent = '—';
@@ -187,14 +189,15 @@ function updateStats() {
     return;
   }
 
-  // Top player by best single score
-  const sorted = [...State.scores].sort((a,b) => b.score - a.score);
-  $('stat-top-val').textContent = sorted[0].name;
+  // Compute best-per-game-per-player totals
+  const playerTotals = calcPlayerTotals(State.scores);
+  const topPlayer = Object.entries(playerTotals).sort((a,b) => b[1].total - a[1].total)[0];
+  $('stat-top-val').textContent = topPlayer ? topPlayer[0] : '—';
 
-  // Leading team by total score
+  // Leading team by sum of player totals
   const teamTotals = {};
-  State.scores.forEach(s => {
-    teamTotals[s.team] = (teamTotals[s.team] || 0) + s.score;
+  Object.values(playerTotals).forEach(p => {
+    teamTotals[p.team] = (teamTotals[p.team] || 0) + p.total;
   });
   const topTeam = Object.entries(teamTotals).sort((a,b) => b[1]-a[1])[0];
   $('stat-team-val').textContent = topTeam ? topTeam[0] : '—';
@@ -291,15 +294,15 @@ function renderLeaderboard() {
     }
   }
 
-  // Team
+  // Team (based on sum of each player's best-per-game totals)
   const teamEl = $('team-rows');
   if (teamEl) {
+    const playerTotals = calcPlayerTotals(filteredScores);
     const teamMap = {};
-    filteredScores.forEach(s => {
-      if (!teamMap[s.team]) teamMap[s.team] = { total: 0, players: new Set(), count: 0 };
-      teamMap[s.team].total += s.score;
-      teamMap[s.team].players.add(s.name);
-      teamMap[s.team].count++;
+    Object.entries(playerTotals).forEach(([name, p]) => {
+      if (!teamMap[p.team]) teamMap[p.team] = { total: 0, players: new Set() };
+      teamMap[p.team].total += p.total;
+      teamMap[p.team].players.add(name);
     });
     if (Object.keys(teamMap).length === 0) {
       teamEl.innerHTML = '<tr><td colspan="5" class="empty-row">No team data yet</td></tr>';
@@ -307,7 +310,7 @@ function renderLeaderboard() {
       const sorted = Object.entries(teamMap).sort((a,b) => b[1].total - a[1].total);
       teamEl.innerHTML = sorted.map(([team, data], i) => {
         const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i+1);
-        const avg = Math.round(data.total / data.count);
+        const avg = Math.round(data.total / data.players.size);
         return `<tr class="${i < 3 ? 'rank-'+(i+1) : ''}">
           <td class="col-rank">${medal}</td>
           <td>${escHtml(team)}</td>
@@ -356,12 +359,7 @@ function renderPlayers() {
   const grid = $('player-grid');
   if (!grid) return;
 
-  const playerMap = {};
-  State.scores.forEach(s => {
-    if (!playerMap[s.name]) playerMap[s.name] = { team: s.team, total: 0, games: 0 };
-    playerMap[s.name].total += s.score;
-    playerMap[s.name].games++;
-  });
+  const playerMap = calcPlayerTotals(State.scores);
 
   if (Object.keys(playerMap).length === 0) {
     grid.innerHTML = '<p class="empty-note">No players yet. Play a game to appear here!</p>';
@@ -401,14 +399,16 @@ function initiateGame(gameId) {
   }
 }
 
-// ── Name Modal ────────────────────────────────────────────────
+// ── Auth / Name Modal ─────────────────────────────────────────
+const AUTH_API = '/api/auth';
+
 function bindNameModal() {
   $('confirm-name-btn').addEventListener('click', confirmName);
   $('skip-name-btn').addEventListener('click', () => {
     State.playerName = 'Guest';
     State.playerTeam = 'Others';
     hideNameModal();
-    showInstructions(State.pendingGame);
+    if (State.pendingGame) showInstructions(State.pendingGame);
   });
   $('player-name-input').addEventListener('keydown', e => {
     if (e.key === 'Enter') confirmName();
@@ -417,11 +417,26 @@ function bindNameModal() {
     const val = $('player-team-input').value;
     $('custom-team-field').style.display = val === 'Others' ? 'block' : 'none';
   });
+  $('logout-btn').addEventListener('click', logoutUser);
+
+  // Auto-login from localStorage
+  restoreSession();
 }
 
-function confirmName() {
+function showAuthError(msg) {
+  const el = $('auth-error');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+function hideAuthError() {
+  $('auth-error').style.display = 'none';
+}
+
+async function confirmName() {
+  hideAuthError();
   const name = $('player-name-input').value.trim();
   if (!name) { $('player-name-input').focus(); return; }
+
   let team = $('player-team-input').value;
   if (!team) { $('player-team-input').focus(); return; }
   if (team === 'Others') {
@@ -434,13 +449,83 @@ function confirmName() {
     }
     team = custom;
   }
+
+  $('confirm-name-btn').disabled = true;
+  $('confirm-name-btn').textContent = 'Loading…';
+
+  try {
+    const res = await fetch(AUTH_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, team }),
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      showAuthError(data.error || 'Something went wrong');
+      return;
+    }
+
+    // Login/register succeeded
+    loginUser(data.user.name, data.user.team);
+    hideNameModal();
+    if (State.pendingGame) showInstructions(State.pendingGame);
+  } catch {
+    // Offline fallback — just use local name
+    loginUser(name, team);
+    hideNameModal();
+    if (State.pendingGame) showInstructions(State.pendingGame);
+  } finally {
+    $('confirm-name-btn').disabled = false;
+    $('confirm-name-btn').textContent = "Let's Play →";
+  }
+}
+
+function loginUser(name, team) {
   State.playerName = name;
   State.playerTeam = team;
-  hideNameModal();
-  showInstructions(State.pendingGame);
+  try { localStorage.setItem('capillary_user', JSON.stringify({ name, team })); } catch {}
+  updateHeaderUser();
+}
+
+function logoutUser() {
+  State.playerName = null;
+  State.playerTeam = null;
+  try { localStorage.removeItem('capillary_user'); } catch {}
+  updateHeaderUser();
+}
+
+function restoreSession() {
+  try {
+    const saved = localStorage.getItem('capillary_user');
+    if (saved) {
+      const { name, team } = JSON.parse(saved);
+      if (name && name !== 'Guest') {
+        State.playerName = name;
+        State.playerTeam = team;
+        updateHeaderUser();
+      }
+    }
+  } catch {}
+}
+
+function updateHeaderUser() {
+  const el = $('header-user');
+  const nameEl = $('header-user-name');
+  if (State.playerName && State.playerName !== 'Guest') {
+    nameEl.textContent = `⭐ ${State.playerName}`;
+    el.style.display = 'flex';
+  } else {
+    el.style.display = 'none';
+  }
 }
 
 function showNameModal() {
+  hideAuthError();
+  // Pre-fill if returning user
+  if (State.playerName && State.playerName !== 'Guest') {
+    $('player-name-input').value = State.playerName;
+  }
   $('name-modal').classList.add('active');
   setTimeout(() => $('player-name-input').focus(), 100);
 }
@@ -485,11 +570,20 @@ function bindGameHud() {
 
 // ── Game Flow ─────────────────────────────────────────────────
 function startGame(gameId) {
+  // Destroy previous game engine if one is still running
+  if (State.currentGame) {
+    const prevEngine = GAME_ENGINES[State.currentGame];
+    if (prevEngine && prevEngine.destroy) prevEngine.destroy();
+  }
+
   State.currentGame = gameId;
   State.currentScore = 0;
   $('game-score-display').textContent = '0';
   $('game-title').textContent = GAMES_META[gameId]?.name || gameId;
   hideGameOver();
+
+  // Ensure canvas is visible (previous DOM-based game may have hidden it)
+  $('game-canvas').style.display = 'block';
 
   // Show overlay
   $('game-area').classList.add('active');
@@ -551,6 +645,23 @@ function hideGameOver() {
 }
 
 // ── Utilities ─────────────────────────────────────────────────
+
+// Compute each player's total as sum of their highest score per game
+function calcPlayerTotals(scores) {
+  const map = {};
+  scores.forEach(s => {
+    if (!map[s.name]) map[s.name] = { team: s.team, games: {}, total: 0 };
+    if (!map[s.name].games[s.game] || s.score > map[s.name].games[s.game]) {
+      map[s.name].games[s.game] = s.score;
+    }
+  });
+  // Compute totals
+  Object.values(map).forEach(p => {
+    p.total = Object.values(p.games).reduce((a, b) => a + b, 0);
+  });
+  return map;
+}
+
 function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
