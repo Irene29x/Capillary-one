@@ -52,21 +52,27 @@ const GAMES_META = {
     name: 'Campaign Launch',
     icon: '🚀',
     desc: 'A bar oscillates across the screen. Stop it in the green zone at the perfect moment to maximize your launch score.',
-    controls: 'Click LAUNCH button — stop the bar in the zone',
+    controls: 'Press SPACEBAR or click LAUNCH — stop the bar in the zone',
     scoreLabel: 'Score',
-  },
-};
+  },  dino: {
+    name: 'Dino Chase',
+    icon: '🦕',
+    desc: 'Run as far as you can! Jump over trees to survive. Speed ramps up after 300 and goes turbo after 1000. Can you reach 2,500?',
+    controls: 'SPACEBAR / Tap / Click — jump',
+    scoreLabel: 'Score',
+  },};
 
 // ── DOM helpers ───────────────────────────────────────────────
 const $ = id => document.getElementById(id);
 const $$ = sel => document.querySelectorAll(sel);
 
 // ── Init ──────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
-  loadScores();
+document.addEventListener('DOMContentLoaded', async () => {
+  await loadScores();
   injectLogos();
   bindNav();
   bindBoardTabs();
+  bindBoardFilters();
   bindGameCards();
   bindNameModal();
   bindInstructions();
@@ -83,8 +89,25 @@ function injectLogos() {
   });
 }
 
-// ── Score Persistence ─────────────────────────────────────────
-function loadScores() {
+// ── Score Persistence (API + localStorage fallback) ──────────
+const API_BASE = '/api/scores';
+
+async function loadScores() {
+  try {
+    const res = await fetch(API_BASE);
+    if (res.ok) {
+      const data = await res.json();
+      State.scores = (data.scores || []).map(s => ({
+        ...s,
+        gameName: s.game_name || GAMES_META[s.game]?.name || s.game,
+        ts: new Date(s.created_at).getTime(),
+      }));
+      // Sync to localStorage as offline cache
+      try { localStorage.setItem('capillary_playground_scores', JSON.stringify(State.scores)); } catch {}
+      return;
+    }
+  } catch {}
+  // Fallback: load from localStorage
   try {
     const saved = localStorage.getItem('capillary_playground_scores');
     State.scores = saved ? JSON.parse(saved) : [];
@@ -92,25 +115,38 @@ function loadScores() {
   } catch { State.scores = []; }
 }
 
-function saveScores() {
-  try {
-    localStorage.setItem('capillary_playground_scores', JSON.stringify(State.scores));
-  } catch {}
-}
-
-function addScore(name, team, game, score) {
-  State.scores.push({
+async function addScore(name, team, game, score) {
+  const entry = {
     name: name || 'Guest',
     team: team || 'Others',
     game,
     gameName: GAMES_META[game]?.name || game,
     score,
     ts: Date.now(),
-  });
-  saveScores();
+  };
+
+  // Optimistic local update
+  State.scores.push(entry);
   updateStats();
   updateBestScores();
   updateTicker();
+
+  // POST to API
+  try {
+    await fetch(API_BASE, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: entry.name, team: entry.team, game, gameName: entry.gameName, score }),
+    });
+    // Refresh full list from server
+    await loadScores();
+    updateStats();
+    updateBestScores();
+    updateTicker();
+  } catch {
+    // Save to localStorage as fallback
+    try { localStorage.setItem('capillary_playground_scores', JSON.stringify(State.scores)); } catch {}
+  }
 }
 
 // ── Navigation ────────────────────────────────────────────────
@@ -148,7 +184,9 @@ function bindBoardTabs() {
 
 // ── Stats ─────────────────────────────────────────────────────
 function updateStats() {
-  $('stat-plays-val').textContent = State.scores.length;
+  // Count unique players
+  const uniquePlayers = new Set(State.scores.map(s => s.name));
+  $('stat-plays-val').textContent = uniquePlayers.size;
 
   if (State.scores.length === 0) {
     $('stat-top-val').textContent = '—';
@@ -156,14 +194,15 @@ function updateStats() {
     return;
   }
 
-  // Top player by best single score
-  const sorted = [...State.scores].sort((a,b) => b.score - a.score);
-  $('stat-top-val').textContent = sorted[0].name;
+  // Compute best-per-game-per-player totals
+  const playerTotals = calcPlayerTotals(State.scores);
+  const topPlayer = Object.entries(playerTotals).sort((a,b) => b[1].total - a[1].total)[0];
+  $('stat-top-val').textContent = topPlayer ? topPlayer[0] : '—';
 
-  // Leading team by total score
+  // Leading team by sum of player totals
   const teamTotals = {};
-  State.scores.forEach(s => {
-    teamTotals[s.team] = (teamTotals[s.team] || 0) + s.score;
+  Object.values(playerTotals).forEach(p => {
+    teamTotals[p.team] = (teamTotals[p.team] || 0) + p.total;
   });
   const topTeam = Object.entries(teamTotals).sort((a,b) => b[1]-a[1])[0];
   $('stat-team-val').textContent = topTeam ? topTeam[0] : '—';
@@ -182,25 +221,71 @@ function updateBestScores() {
 
 // ── Ticker ────────────────────────────────────────────────────
 function updateTicker() {
-  const sorted = [...State.scores].sort((a,b) => b.score - a.score);
-  const top = sorted[0];
-  const text = top
-    ? `🏆 Top Scorer: ${top.name} (${top.score.toLocaleString()} pts) ${Array(3).fill('&nbsp;·&nbsp;').join('')} Games Played: ${State.scores.length} &nbsp;·&nbsp; #One Capillary &nbsp;·&nbsp; Who's next? &nbsp;·&nbsp;`
-    : `🏆 Top Scorer: — &nbsp;·&nbsp; Games Played: 0 &nbsp;·&nbsp; #One Capillary &nbsp;·&nbsp; Ready to play? Choose your game below! &nbsp;·&nbsp;`;
+  const playerTotals = calcPlayerTotals(State.scores);
+  const topEntry = Object.entries(playerTotals).sort((a,b) => b[1].total - a[1].total)[0];
+  const text = topEntry
+    ? `🏆 Top Scorer: ${topEntry[0]} (${topEntry[1].total.toLocaleString()} pts) &nbsp;·&nbsp; #OneCapillary &nbsp;·&nbsp; Who's next? &nbsp;·&nbsp;`
+    : `🏆 Top Scorer: — &nbsp;·&nbsp; #OneCapillary &nbsp;·&nbsp; Ready to play? Choose your game below! &nbsp;·&nbsp;`;
   [$('ticker-text'), $('ticker-text-clone')].forEach(el => {
     if (el) el.innerHTML = text;
   });
 }
 
+// ── Board Filters ─────────────────────────────────────────────
+function bindBoardFilters() {
+  $$('.period-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      $$('.period-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderLeaderboard();
+    });
+  });
+  const gameFilter = $('game-filter');
+  if (gameFilter) {
+    gameFilter.addEventListener('change', () => renderLeaderboard());
+  }
+}
+
+function getFilteredScores() {
+  let scores = [...State.scores];
+
+  // Period filter
+  const activeBtn = document.querySelector('.period-btn.active');
+  const period = activeBtn ? activeBtn.dataset.period : 'all';
+  const now = Date.now();
+  if (period === 'today') {
+    scores = scores.filter(s => (now - s.ts) < 86400000);
+  } else if (period === 'week') {
+    scores = scores.filter(s => (now - s.ts) < 604800000);
+  }
+
+  // Game filter
+  const gameFilter = $('game-filter');
+  const selectedGame = gameFilter ? gameFilter.value : '';
+  if (selectedGame) {
+    scores = scores.filter(s => s.game === selectedGame);
+  }
+
+  return scores;
+}
+
 // ── Leaderboard Render ────────────────────────────────────────
 function renderLeaderboard() {
+  const filteredScores = getFilteredScores();
+
   // Individual
   const indEl = $('individual-rows');
   if (indEl) {
-    if (State.scores.length === 0) {
+    if (filteredScores.length === 0) {
       indEl.innerHTML = '<tr><td colspan="5" class="empty-row">No scores yet — be the first to play!</td></tr>';
     } else {
-      const sorted = [...State.scores].sort((a,b) => b.score - a.score).slice(0, 20);
+      // Best score per player per game, then sort
+      const bestMap = {};
+      filteredScores.forEach(s => {
+        const key = s.name + '||' + s.game;
+        if (!bestMap[key] || s.score > bestMap[key].score) bestMap[key] = s;
+      });
+      const sorted = Object.values(bestMap).sort((a,b) => b.score - a.score).slice(0, 30);
       indEl.innerHTML = sorted.map((s, i) => {
         const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i+1);
         return `<tr class="${i < 3 ? 'rank-'+(i+1) : ''}">
@@ -214,15 +299,15 @@ function renderLeaderboard() {
     }
   }
 
-  // Team
+  // Team (based on sum of each player's best-per-game totals)
   const teamEl = $('team-rows');
   if (teamEl) {
+    const playerTotals = calcPlayerTotals(filteredScores);
     const teamMap = {};
-    State.scores.forEach(s => {
-      if (!teamMap[s.team]) teamMap[s.team] = { total: 0, players: new Set(), count: 0 };
-      teamMap[s.team].total += s.score;
-      teamMap[s.team].players.add(s.name);
-      teamMap[s.team].count++;
+    Object.entries(playerTotals).forEach(([name, p]) => {
+      if (!teamMap[p.team]) teamMap[p.team] = { total: 0, players: new Set() };
+      teamMap[p.team].total += p.total;
+      teamMap[p.team].players.add(name);
     });
     if (Object.keys(teamMap).length === 0) {
       teamEl.innerHTML = '<tr><td colspan="5" class="empty-row">No team data yet</td></tr>';
@@ -230,13 +315,44 @@ function renderLeaderboard() {
       const sorted = Object.entries(teamMap).sort((a,b) => b[1].total - a[1].total);
       teamEl.innerHTML = sorted.map(([team, data], i) => {
         const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i+1);
-        const avg = Math.round(data.total / data.count);
+        const avg = Math.round(data.total / data.players.size);
         return `<tr class="${i < 3 ? 'rank-'+(i+1) : ''}">
           <td class="col-rank">${medal}</td>
           <td>${escHtml(team)}</td>
           <td>${data.players.size}</td>
           <td class="col-score">${data.total.toLocaleString()}</td>
           <td class="col-score">${avg.toLocaleString()}</td>
+        </tr>`;
+      }).join('');
+    }
+  }
+
+  // Overall (composite best-per-game per player)
+  const overallEl = $('overall-rows');
+  if (overallEl) {
+    const playerBest = {};
+    filteredScores.forEach(s => {
+      if (!playerBest[s.name]) playerBest[s.name] = { team: s.team, games: {} };
+      if (!playerBest[s.name].games[s.game] || s.score > playerBest[s.name].games[s.game]) {
+        playerBest[s.name].games[s.game] = s.score;
+      }
+    });
+    const ranked = Object.entries(playerBest).map(([name, data]) => {
+      const total = Object.values(data.games).reduce((a, b) => a + b, 0);
+      return { name, team: data.team, gamesPlayed: Object.keys(data.games).length, total };
+    }).sort((a, b) => b.total - a.total).slice(0, 30);
+
+    if (ranked.length === 0) {
+      overallEl.innerHTML = '<tr><td colspan="5" class="empty-row">No data yet</td></tr>';
+    } else {
+      overallEl.innerHTML = ranked.map((p, i) => {
+        const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i+1);
+        return `<tr class="${i < 3 ? 'rank-'+(i+1) : ''}">
+          <td class="col-rank">${medal}</td>
+          <td>${escHtml(p.name)}</td>
+          <td>${escHtml(p.team)}</td>
+          <td>${p.gamesPlayed}</td>
+          <td class="col-score">${p.total.toLocaleString()}</td>
         </tr>`;
       }).join('');
     }
@@ -248,12 +364,7 @@ function renderPlayers() {
   const grid = $('player-grid');
   if (!grid) return;
 
-  const playerMap = {};
-  State.scores.forEach(s => {
-    if (!playerMap[s.name]) playerMap[s.name] = { team: s.team, total: 0, games: 0 };
-    playerMap[s.name].total += s.score;
-    playerMap[s.name].games++;
-  });
+  const playerMap = calcPlayerTotals(State.scores);
 
   if (Object.keys(playerMap).length === 0) {
     grid.innerHTML = '<p class="empty-note">No players yet. Play a game to appear here!</p>';
@@ -293,14 +404,16 @@ function initiateGame(gameId) {
   }
 }
 
-// ── Name Modal ────────────────────────────────────────────────
+// ── Auth / Name Modal ─────────────────────────────────────────
+const AUTH_API = '/api/auth';
+
 function bindNameModal() {
   $('confirm-name-btn').addEventListener('click', confirmName);
   $('skip-name-btn').addEventListener('click', () => {
     State.playerName = 'Guest';
     State.playerTeam = 'Others';
     hideNameModal();
-    showInstructions(State.pendingGame);
+    if (State.pendingGame) showInstructions(State.pendingGame);
   });
   $('player-name-input').addEventListener('keydown', e => {
     if (e.key === 'Enter') confirmName();
@@ -309,24 +422,115 @@ function bindNameModal() {
     const val = $('player-team-input').value;
     $('custom-team-field').style.display = val === 'Others' ? 'block' : 'none';
   });
+  $('logout-btn').addEventListener('click', logoutUser);
+
+  // Auto-login from localStorage
+  restoreSession();
 }
 
-function confirmName() {
+function showAuthError(msg) {
+  const el = $('auth-error');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+function hideAuthError() {
+  $('auth-error').style.display = 'none';
+}
+
+async function confirmName() {
+  hideAuthError();
   const name = $('player-name-input').value.trim();
   if (!name) { $('player-name-input').focus(); return; }
+
   let team = $('player-team-input').value;
   if (!team) { $('player-team-input').focus(); return; }
   if (team === 'Others') {
     const custom = $('custom-team-input').value.trim();
-    if (custom) team = custom;
+    if (!custom) {
+      $('custom-team-input').focus();
+      $('custom-team-input').style.borderColor = 'var(--red)';
+      $('custom-team-input').setAttribute('placeholder', 'Please enter a team name');
+      return;
+    }
+    team = custom;
   }
+
+  $('confirm-name-btn').disabled = true;
+  $('confirm-name-btn').textContent = 'Loading…';
+
+  try {
+    const res = await fetch(AUTH_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, team }),
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      showAuthError(data.error || 'Something went wrong');
+      return;
+    }
+
+    // Login/register succeeded
+    loginUser(data.user.name, data.user.team);
+    hideNameModal();
+    if (State.pendingGame) showInstructions(State.pendingGame);
+  } catch {
+    // Offline fallback — just use local name
+    loginUser(name, team);
+    hideNameModal();
+    if (State.pendingGame) showInstructions(State.pendingGame);
+  } finally {
+    $('confirm-name-btn').disabled = false;
+    $('confirm-name-btn').textContent = "Let's Play →";
+  }
+}
+
+function loginUser(name, team) {
   State.playerName = name;
   State.playerTeam = team;
-  hideNameModal();
-  showInstructions(State.pendingGame);
+  try { localStorage.setItem('capillary_user', JSON.stringify({ name, team })); } catch {}
+  updateHeaderUser();
+}
+
+function logoutUser() {
+  State.playerName = null;
+  State.playerTeam = null;
+  try { localStorage.removeItem('capillary_user'); } catch {}
+  updateHeaderUser();
+}
+
+function restoreSession() {
+  try {
+    const saved = localStorage.getItem('capillary_user');
+    if (saved) {
+      const { name, team } = JSON.parse(saved);
+      if (name && name !== 'Guest') {
+        State.playerName = name;
+        State.playerTeam = team;
+        updateHeaderUser();
+      }
+    }
+  } catch {}
+}
+
+function updateHeaderUser() {
+  const el = $('header-user');
+  const nameEl = $('header-user-name');
+  if (State.playerName && State.playerName !== 'Guest') {
+    nameEl.textContent = `Welcome ${State.playerName}`;
+    el.style.display = 'flex';
+  } else {
+    el.style.display = 'none';
+  }
 }
 
 function showNameModal() {
+  hideAuthError();
+  // Pre-fill if returning user
+  if (State.playerName && State.playerName !== 'Guest') {
+    $('player-name-input').value = State.playerName;
+  }
   $('name-modal').classList.add('active');
   setTimeout(() => $('player-name-input').focus(), 100);
 }
@@ -360,9 +564,10 @@ function bindGameHud() {
     hideGameOver();
     startGame(State.currentGame);
   });
-  $('save-close-btn').addEventListener('click', () => {
-    if (State.currentScore > 0 && State.playerName) {
-      addScore(State.playerName, State.playerTeam, State.currentGame, State.currentScore);
+  $('save-close-btn').addEventListener('click', async () => {
+    if (State.currentScore > 0 && State.playerName && State.playerName !== 'Guest') {
+      await addScore(State.playerName, State.playerTeam, State.currentGame, State.currentScore);
+      renderLeaderboard();
     }
     closeGame();
   });
@@ -370,11 +575,20 @@ function bindGameHud() {
 
 // ── Game Flow ─────────────────────────────────────────────────
 function startGame(gameId) {
+  // Destroy previous game engine if one is still running
+  if (State.currentGame) {
+    const prevEngine = GAME_ENGINES[State.currentGame];
+    if (prevEngine && prevEngine.destroy) prevEngine.destroy();
+  }
+
   State.currentGame = gameId;
   State.currentScore = 0;
   $('game-score-display').textContent = '0';
   $('game-title').textContent = GAMES_META[gameId]?.name || gameId;
   hideGameOver();
+
+  // Ensure canvas is visible (previous DOM-based game may have hidden it)
+  $('game-canvas').style.display = 'block';
 
   // Show overlay
   $('game-area').classList.add('active');
@@ -425,9 +639,9 @@ function showGameOver(won, score) {
   panel.style.animation = 'none';
   setTimeout(() => panel.style.animation = '', 10);
 
-  // Auto-save score
-  if (score > 0 && State.playerName) {
-    addScore(State.playerName, State.playerTeam, State.currentGame, score);
+  // Auto-save score (skip Guests)
+  if (score > 0 && State.playerName && State.playerName !== 'Guest') {
+    addScore(State.playerName, State.playerTeam, State.currentGame, score).then(() => renderLeaderboard());
   }
 }
 
@@ -436,6 +650,23 @@ function hideGameOver() {
 }
 
 // ── Utilities ─────────────────────────────────────────────────
+
+// Compute each player's total as sum of their highest score per game
+function calcPlayerTotals(scores) {
+  const map = {};
+  scores.forEach(s => {
+    if (!map[s.name]) map[s.name] = { team: s.team, games: {}, total: 0 };
+    if (!map[s.name].games[s.game] || s.score > map[s.name].games[s.game]) {
+      map[s.name].games[s.game] = s.score;
+    }
+  });
+  // Compute totals
+  Object.values(map).forEach(p => {
+    p.total = Object.values(p.games).reduce((a, b) => a + b, 0);
+  });
+  return map;
+}
+
 function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }

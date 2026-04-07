@@ -61,20 +61,26 @@ GAME_ENGINES.cashflow = (function () {
       map,
       totalCoins,
       coinsLeft: totalCoins,
-      player: { c: 10, r: 16, dx: 0, dy: 0, px: 10*TILE, py: 16*TILE, speed: 8, moving: false },
+      player: { c: 10, r: 16, dx: 0, dy: 0, px: 10*TILE, py: 16*TILE, speed: 5, moving: false },
       enemies: [
         { c: 9,  r: 9,  px: 9*TILE,  py: 9*TILE,  dx: 1, dy: 0, color: '#ff4545', move: 0 },
         { c: 11, r: 9,  px: 11*TILE, py: 9*TILE,  dx: -1,dy: 0, color: '#a855f7', move: 0 },
         { c: 10, r: 10, px: 10*TILE, py: 10*TILE, dx: 0, dy: 1, color: '#4a9eff', move: 0 },
+        { c: 9, r: 10, px: 9*TILE, py: 10*TILE, dx: 0, dy: -1, color: '#f59e0b', move: 0 },
       ],
       score: 0,
-      lives: 3,
+      lives: 2,
       frame: 0,
       onScore,
       onEnd,
       gameOver: false,
       won: false,
       moveTimer: 0,
+      startTime: Date.now(),
+      lastSpawnTime: Date.now(),
+      spawnInterval: 7000,
+      enemyDelay: 10,
+      timeLimit: 45,
     };
 
     // Load logo image
@@ -145,9 +151,28 @@ GAME_ENGINES.cashflow = (function () {
 
   function updateEnemies() {
     const dirs = [{dx:1,dy:0},{dx:-1,dy:0},{dx:0,dy:1},{dx:0,dy:-1}];
+    // Spawn new ghosts over time
+    const now = Date.now();
+    if (now - state.lastSpawnTime >= state.spawnInterval && state.enemies.length < 15) {
+      const spawnPoints = [{c:9,r:9},{c:11,r:9},{c:10,r:10},{c:9,r:10},{c:11,r:10}];
+      const sp = spawnPoints[state.enemies.length % spawnPoints.length];
+      const colors = ['#ff4545','#a855f7','#4a9eff','#f59e0b','#ef4444','#10b981','#ec4899','#8b5cf6','#06b6d4'];
+      state.enemies.push({
+        c: sp.c, r: sp.r, px: sp.c*TILE, py: sp.r*TILE,
+        dx: Math.random() > 0.5 ? 1 : -1, dy: 0,
+        color: colors[state.enemies.length % colors.length], move: 0,
+      });
+      state.lastSpawnTime = now;
+      // Speed up over time
+      state.spawnInterval = Math.max(3000, state.spawnInterval - 500);
+    }
+    // Speed up enemies gradually
+    const elapsed = (now - state.startTime) / 1000;
+    state.enemyDelay = Math.max(3, Math.round(10 - elapsed * 0.2));
+
     state.enemies.forEach(e => {
       e.move++;
-      if (e.move < 12) return; // slowed enemies
+      if (e.move < state.enemyDelay) return;
       e.move = 0;
 
       // Try to keep direction, else random turn
@@ -227,6 +252,17 @@ GAME_ENGINES.cashflow = (function () {
       ctx.fillText('❌', e.px + TILE/2, e.py + TILE/2);
     });
 
+    // Timer display (countdown from timeLimit)
+    const elapsedSec = Math.floor((Date.now() - state.startTime) / 1000);
+    const remaining = Math.max(0, state.timeLimit - elapsedSec);
+    const mins = Math.floor(remaining / 60);
+    const secs = remaining % 60;
+    ctx.fillStyle = remaining <= 10 ? 'rgba(255,69,69,0.9)' : 'rgba(255,255,255,0.7)';
+    ctx.font = '13px JetBrains Mono, monospace';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'top';
+    ctx.fillText(`⏱ ${mins}:${secs.toString().padStart(2,'0')}  👻 ${state.enemies.length}`, canvas.width - 8, 6);
+
     // Player (logo or fallback)
     if (logoImg && logoImg.complete && logoImg.naturalWidth > 0) {
       ctx.save();
@@ -259,10 +295,22 @@ GAME_ENGINES.cashflow = (function () {
     updateEnemies();
     checkCollisions();
 
+    // Check if time ran out
+    const elapsed = Math.floor((Date.now() - state.startTime) / 1000);
+    if (elapsed >= state.timeLimit) {
+      state.gameOver = true;
+      draw();
+      state.onEnd(false, state.score);
+      return;
+    }
+
     if (state.coinsLeft <= 0) {
       state.won = true;
       draw();
-      state.onEnd(true, state.score);
+      // Final score: coins + time bonus + lives bonus + completion bonus, cap at 2500
+      const remainingSec = Math.max(0, state.timeLimit - elapsed);
+      const finalScore = Math.min(2500, state.score + remainingSec * 30 + state.lives * 200 + 200);
+      state.onEnd(true, finalScore);
       return;
     }
     if (state.gameOver) {
@@ -383,8 +431,16 @@ GAME_ENGINES.reaction = (function () {
       const rt = performance.now() - state.flashTime;
       state.times.push(rt);
       state.round++;
-      const score = Math.round(rt);
-      state.onScore(score);
+      // Compute running scaled score from rounds so far and report it
+      const runningAvg = state.times.reduce((a, b) => a + b, 0) / state.times.length;
+      let runningScore;
+      if (runningAvg <= 120) runningScore = 2500;
+      else if (runningAvg <= 150) runningScore = Math.round(2500 - (runningAvg - 120) * 20);
+      else if (runningAvg <= 200) runningScore = Math.round(1900 - (runningAvg - 150) * 12);
+      else if (runningAvg <= 300) runningScore = Math.round(1300 - (runningAvg - 200) * 6);
+      else if (runningAvg <= 500) runningScore = Math.round(700 - (runningAvg - 300) * 2.5);
+      else runningScore = Math.max(0, Math.round(200 - (runningAvg - 500) * 0.5));
+      state.onScore(runningScore);
       padEl.className = 'reaction-pad waiting';
       labelEl.textContent = `${Math.round(rt)} ms!`;
       state.ready = false;
@@ -395,8 +451,14 @@ GAME_ENGINES.reaction = (function () {
   function finish() {
     if (!state) return;
     const avg = state.times.reduce((a,b) => a+b, 0) / state.times.length;
-    // Score: lower ms = higher score (max 1000)
-    const score = Math.max(0, Math.round(1000 - avg));
+    // Score: lower ms = higher score (max 2500, very hard to reach — need sub-120ms avg)
+    let score;
+    if (avg <= 120) score = 2500;
+    else if (avg <= 150) score = Math.round(2500 - (avg - 120) * 20);
+    else if (avg <= 200) score = Math.round(1900 - (avg - 150) * 12);
+    else if (avg <= 300) score = Math.round(1300 - (avg - 200) * 6);
+    else if (avg <= 500) score = Math.round(700 - (avg - 300) * 2.5);
+    else score = Math.max(0, Math.round(200 - (avg - 500) * 0.5));
     state.onEnd(true, score);
   }
 
@@ -420,7 +482,7 @@ GAME_ENGINES.reaction = (function () {
    16 cards (8 pairs), fewer moves = higher score
    ============================================================ */
 GAME_ENGINES.memory = (function () {
-  const EMOJIS = ['🎯','⚡','💰','🚀','🏆','💎','🎪','🌟'];
+  const EMOJIS = ['🎯','⚡','💰','🚀','🏆','💎','🎪','🌟','🔥','🎵','🧩','💡'];
 
   let state = null;
   let container = null;
@@ -490,11 +552,12 @@ GAME_ENGINES.memory = (function () {
         state.matched++;
         state.flipped = [];
         state.locked = false;
-        const score = Math.max(0, 800 - state.moves * 20);
+        // Unified formula: same as final score so live display is consistent
+        const score = Math.max(50, Math.round(2500 - (state.moves - 12) * 80));
         state.onScore(score);
         if (state.matched === EMOJIS.length) {
           setTimeout(() => {
-            const finalScore = Math.max(0, 1000 - state.moves * 25);
+            const finalScore = Math.max(50, Math.round(2500 - (state.moves - 12) * 80));
             state.onEnd(true, finalScore);
           }, 500);
         }
@@ -523,12 +586,12 @@ GAME_ENGINES.memory = (function () {
 
 /* ============================================================
    4. RISK VS REWARD — Mines game
-   5x5 grid, 6 bombs, 1 jackpot, rest safe
+   6x6 grid, 12 bombs, 1 jackpot, rest safe
    Click safe tiles to multiply score, find jackpot to win big
    ============================================================ */
 GAME_ENGINES.mines = (function () {
-  const GRID = 5;
-  const BOMBS = 7;
+  const GRID = 6;
+  const BOMBS = 12;
 
   let state = null;
   let container = null;
@@ -566,7 +629,7 @@ GAME_ENGINES.mines = (function () {
       tiles: [],
       safeRevealed: 0,
       multiplier: 1,
-      baseScore: 50,
+      baseScore: 100,
       gameOver: false,
       onScore,
       onEnd,
@@ -590,7 +653,7 @@ GAME_ENGINES.mines = (function () {
     cashBtn.addEventListener('click', () => {
       if (!state || state.gameOver) return;
       if (state.safeRevealed === 0) return;
-      const score = Math.round(state.baseScore * state.multiplier);
+      const score = Math.min(2500, Math.round(state.baseScore * state.multiplier));
       state.gameOver = true;
       state.onEnd(true, score);
     });
@@ -620,25 +683,34 @@ GAME_ENGINES.mines = (function () {
           state.tiles[i].textContent = '❌';
         }
       });
-      const score = state.safeRevealed > 0 ? Math.round(state.baseScore * Math.max(1, state.multiplier * 0.3)) : 0;
+      const score = state.safeRevealed > 0 ? Math.min(2500, Math.round(state.baseScore * Math.max(1, state.multiplier * 0.3))) : 0;
       setTimeout(() => state && state.onEnd(false, score), 600);
     } else if (type === 'jackpot') {
       tile.classList.add('jackpot');
       tile.textContent = '💰';
       state.multiplier *= 5;
       state.safeRevealed++;
-      const score = Math.round(state.baseScore * state.multiplier);
-      state.gameOver = true;
-      state.onScore(score);
-      setTimeout(() => state && state.onEnd(true, score), 500);
+      const currentScore = Math.min(2500, Math.round(state.baseScore * state.multiplier));
+      state.onScore(currentScore);
+      state.infoEl.textContent = `💰 JACKPOT! Multiplier: ×${state.multiplier.toFixed(1)} — Score: ${currentScore} pts`;
     } else {
       tile.classList.add('safe');
       tile.textContent = '✅';
       state.safeRevealed++;
-      state.multiplier = 1 + state.safeRevealed * 0.5;
-      const currentScore = Math.round(state.baseScore * state.multiplier);
+      state.multiplier = 1 + state.safeRevealed * 0.55;
+      const currentScore = Math.min(2500, Math.round(state.baseScore * state.multiplier));
       state.onScore(currentScore);
       state.infoEl.textContent = `Multiplier: ×${state.multiplier.toFixed(1)} — Score: ${currentScore} pts`;
+    }
+
+    // Check if all non-bomb tiles are revealed
+    if (!state.gameOver) {
+      const totalSafe = state.cells.filter(c => c !== 'bomb').length;
+      if (state.safeRevealed >= totalSafe) {
+        state.gameOver = true;
+        const score = Math.min(2500, Math.round(state.baseScore * state.multiplier));
+        setTimeout(() => state && state.onEnd(true, score), 500);
+      }
     }
   }
 
@@ -711,9 +783,9 @@ GAME_ENGINES.timing = (function () {
       totalScore: 0,
       barPos: 0,       // 0 to 1
       barDir: 1,
-      speed: 0.008,
+      speed: 0.012,
       zoneStart: 0.35,
-      zoneWidth: 0.22,
+      zoneWidth: 0.16,
       running: true,
       waitingClick: true,
       onScore,
@@ -766,7 +838,7 @@ GAME_ENGINES.timing = (function () {
     let roundScore = 0;
     let msg = '';
     if (inZone) {
-      const accuracy = 1 - (distFromCenter / maxDist);
+      const accuracy = Math.min(1, 1 - (distFromCenter / maxDist));
       roundScore = Math.round(100 + accuracy * 400);
       msg = accuracy > 0.8 ? '🎯 Perfect! +' + roundScore : '✅ Good! +' + roundScore;
       state.resultEl.style.color = '#2ddd82';
@@ -787,10 +859,10 @@ GAME_ENGINES.timing = (function () {
       state.running = false;
       setTimeout(() => state && state.onEnd(true, state.totalScore), 800);
     } else {
-      // Speed up slightly each round
-      state.speed = 0.008 + state.round * 0.003;
-      // Shrink zone slightly
-      state.zoneWidth = Math.max(0.12, 0.22 - state.round * 0.02);
+      // Speed up more aggressively each round
+      state.speed = 0.012 + state.round * 0.005;
+      // Shrink zone more aggressively
+      state.zoneWidth = Math.max(0.06, 0.16 - state.round * 0.025);
       state.zone.style.width = (state.zoneWidth * 100) + '%';
       setTimeout(() => {
         if (!state) return;
@@ -809,6 +881,402 @@ GAME_ENGINES.timing = (function () {
     state = null;
     container = null;
     animId = null;
+  }
+
+  return { init, destroy };
+})();
+
+
+/* ============================================================
+   6. DINO CHASE — Chrome Dino-style runner
+   Tap/Space to jump over trees. Speed ramps up through Normal → Fast → Turbo → INSANE.
+   Max score 5000. Game runs until collision.
+   ============================================================ */
+GAME_ENGINES.dino = (function () {
+  let state, ctx, canvas, animId;
+
+  const GROUND_Y_RATIO = 0.78;
+  const BFLY_W = 44;
+  const BFLY_H = 40;
+  const GRAVITY = 0.6;
+  const JUMP_FORCE = -12;
+  const MAX_SCORE = 5000;
+  // Minimum frames between obstacles = jump duration + landing buffer
+  const JUMP_FRAMES = Math.ceil(2 * Math.abs(JUMP_FORCE) / GRAVITY); // 40
+  const MIN_SPAWN_GAP = JUMP_FRAMES + 10; // 50 frames — always jumpable
+
+  function init(_canvas, onScore, onEnd) {
+    canvas = _canvas;
+    ctx = canvas.getContext('2d');
+    canvas.width = 672;
+    canvas.height = 320;
+
+    const groundY = Math.floor(canvas.height * GROUND_Y_RATIO);
+
+    state = {
+      groundY,
+      dino: { x: 60, y: groundY - BFLY_H, vy: 0, jumping: false, w: BFLY_W, h: BFLY_H },
+      obstacles: [],
+      score: 0,
+      frame: 0,
+      speed: 4,
+      baseSpeed: 4,
+      spawnTimer: 0,
+      spawnInterval: 90,
+      gameOver: false,
+      onScore,
+      onEnd,
+      legFrame: 0,
+      particles: [],
+      jumpCount: 0,
+      wingAngle: 0,
+    };
+
+    document.addEventListener('keydown', onKeyDino);
+    canvas.addEventListener('click', jumpDino);
+    canvas.addEventListener('touchstart', jumpDino);
+
+    loop();
+  }
+
+  function onKeyDino(e) {
+    if (e.code === 'Space' || e.key === ' ' || e.key === 'ArrowUp' || e.key === 'w') {
+      e.preventDefault();
+      jumpDino();
+    }
+  }
+
+  function spawnJumpParticles() {
+    const d = state.dino;
+    const cx = d.x + d.w / 2;
+    const cy = d.y + d.h / 2;
+    const colors = ['#ff6bf0','#ffcb47','#47e0ff','#a855f7','#ff4545','#2ddd82','#ff9626'];
+    for (let i = 0; i < 18; i++) {
+      const angle = (Math.PI * 2 * i) / 18 + Math.random() * 0.4;
+      const speed = 1.5 + Math.random() * 3;
+      state.particles.push({
+        x: cx, y: cy,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - 1.5,
+        life: 30 + Math.random() * 20,
+        maxLife: 50,
+        size: 2 + Math.random() * 4,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        type: Math.random() > 0.5 ? 'circle' : 'star',
+      });
+    }
+  }
+
+  function jumpDino() {
+    if (!state || state.gameOver) return;
+    if (!state.dino.jumping) {
+      state.dino.vy = JUMP_FORCE;
+      state.dino.jumping = true;
+      state.jumpCount++;
+      state.score += 50;
+      if (state.score >= MAX_SCORE) state.score = MAX_SCORE;
+      state.onScore(state.score);
+      updateSpeed();
+      spawnJumpParticles();
+    }
+  }
+
+  function spawnTree() {
+    const types = [
+      { w: 20, h: 40 },
+      { w: 28, h: 55 },
+      { w: 22, h: 48 },
+    ];
+    const t = types[Math.floor(Math.random() * types.length)];
+    state.obstacles.push({
+      x: canvas.width + 20,
+      y: state.groundY - t.h,
+      w: t.w,
+      h: t.h,
+      scored: false,
+    });
+  }
+
+  function updateSpeed() {
+    const s = state.score;
+    if (s >= 3500) {
+      // OVERLY INSANE: speed ramps 18 → 30 between 3500-5000
+      const progress = Math.min(1, (s - 3500) / 1500);
+      state.speed = 18 + progress * 12;         // 18 → 30
+      state.spawnInterval = MIN_SPAWN_GAP;       // absolute tightest gaps
+    } else if (s >= 1500) {
+      // INSANE: speed ramps 11 → 18 between 1500-3500
+      const progress = (s - 1500) / 2000;
+      state.speed = 11 + progress * 7;          // 11 → 18
+      state.spawnInterval = Math.max(MIN_SPAWN_GAP, Math.round(55 - progress * 5));
+    } else if (s >= 500) {
+      // Fast: speed ramps 6 → 9 between 500-1500
+      const progress = (s - 500) / 1000;
+      state.speed = 6 + progress * 3;           // 6 → 9
+      state.spawnInterval = Math.round(70 - progress * 15);
+    } else {
+      // Normal: speed ramps 4 → 6 between 0-500
+      const progress = s / 500;
+      state.speed = 4 + progress * 2;           // 4 → 6
+      state.spawnInterval = Math.round(90 - progress * 20);
+    }
+  }
+
+  function update() {
+    const d = state.dino;
+    d.vy += GRAVITY;
+    d.y += d.vy;
+    if (d.y >= state.groundY - d.h) {
+      d.y = state.groundY - d.h;
+      d.vy = 0;
+      d.jumping = false;
+    }
+
+    state.spawnTimer++;
+    if (state.spawnTimer >= state.spawnInterval) {
+      // Ensure the last obstacle is far enough away so the player can always jump
+      const minPixelGap = MIN_SPAWN_GAP * state.speed;
+      const lastObs = state.obstacles[state.obstacles.length - 1];
+      if (!lastObs || lastObs.x <= canvas.width - minPixelGap) {
+        state.spawnTimer = 0;
+        spawnTree();
+      }
+    }
+
+    for (let i = state.obstacles.length - 1; i >= 0; i--) {
+      const o = state.obstacles[i];
+      o.x -= state.speed;
+      if (!o.scored && o.x + o.w < d.x) {
+        o.scored = true;
+      }
+      if (o.x + o.w < -20) {
+        state.obstacles.splice(i, 1);
+      }
+    }
+
+    for (const o of state.obstacles) {
+      const margin = 6;
+      if (
+        d.x + margin < o.x + o.w &&
+        d.x + d.w - margin > o.x &&
+        d.y + margin < o.y + o.h &&
+        d.y + d.h - margin > o.y
+      ) {
+        state.gameOver = true;
+        return;
+      }
+    }
+
+    // Distance/survival bonus: +1 per frame
+    state.score = Math.min(MAX_SCORE, state.score + 1);
+    state.onScore(state.score);
+
+    state.frame++;
+    state.legFrame++;
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+    grad.addColorStop(0, '#0a0b14');
+    grad.addColorStop(1, '#0f1623');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.strokeStyle = 'rgba(74,158,255,0.3)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, state.groundY);
+    ctx.lineTo(canvas.width, state.groundY);
+    ctx.stroke();
+
+    ctx.fillStyle = 'rgba(74,158,255,0.05)';
+    ctx.fillRect(0, state.groundY, canvas.width, canvas.height - state.groundY);
+
+    state.obstacles.forEach(o => {
+      const trunkW = o.w * 0.35;
+      ctx.fillStyle = '#5c3d2e';
+      ctx.fillRect(o.x + (o.w - trunkW) / 2, o.y + o.h * 0.5, trunkW, o.h * 0.5);
+      ctx.fillStyle = '#228b22';
+      ctx.beginPath();
+      ctx.moveTo(o.x + o.w / 2, o.y);
+      ctx.lineTo(o.x + o.w + 4, o.y + o.h * 0.6);
+      ctx.lineTo(o.x - 4, o.y + o.h * 0.6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#1e7a1e';
+      ctx.beginPath();
+      ctx.moveTo(o.x + o.w / 2, o.y + o.h * 0.1);
+      ctx.lineTo(o.x + o.w + 2, o.y + o.h * 0.55);
+      ctx.lineTo(o.x - 2, o.y + o.h * 0.55);
+      ctx.closePath();
+      ctx.fill();
+    });
+
+    const d = state.dino;
+    state.wingAngle = Math.sin(state.frame * 0.15) * 0.5;
+
+    // --- Draw butterfly ---
+    const bx = d.x + d.w / 2;
+    const by = d.y + d.h / 2;
+    const wingFlap = Math.max(0.1, Math.sin(state.frame * 0.18) * 0.6 + 0.4);
+
+    ctx.save();
+    ctx.translate(bx, by);
+
+    // Glow
+    ctx.shadowColor = 'rgba(168,85,247,0.6)';
+    ctx.shadowBlur = 16;
+
+    // Left wing (upper)
+    ctx.fillStyle = '#a855f7';
+    ctx.beginPath();
+    ctx.ellipse(-10, -6, 14 * wingFlap, 12, -0.4, 0, Math.PI * 2);
+    ctx.fill();
+    // Left wing (lower)
+    ctx.fillStyle = '#ec4899';
+    ctx.beginPath();
+    ctx.ellipse(-8, 6, 10 * wingFlap, 9, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Right wing (upper)
+    ctx.fillStyle = '#a855f7';
+    ctx.beginPath();
+    ctx.ellipse(10, -6, 14 * wingFlap, 12, 0.4, 0, Math.PI * 2);
+    ctx.fill();
+    // Right wing (lower)
+    ctx.fillStyle = '#ec4899';
+    ctx.beginPath();
+    ctx.ellipse(8, 6, 10 * wingFlap, 9, 0.3, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.shadowBlur = 0;
+
+    // Wing details - dots
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.beginPath();
+    ctx.arc(-10 * wingFlap, -5, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(10 * wingFlap, -5, 3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Body
+    ctx.fillStyle = '#1e1b4b';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 3, 12, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Head
+    ctx.fillStyle = '#1e1b4b';
+    ctx.beginPath();
+    ctx.arc(0, -14, 4, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Antennae
+    ctx.strokeStyle = '#1e1b4b';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(-1, -17);
+    ctx.quadraticCurveTo(-6, -26, -10, -24);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(1, -17);
+    ctx.quadraticCurveTo(6, -26, 10, -24);
+    ctx.stroke();
+    // Antenna tips
+    ctx.fillStyle = '#ffcb47';
+    ctx.beginPath(); ctx.arc(-10, -24, 2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(10, -24, 2, 0, Math.PI * 2); ctx.fill();
+
+    ctx.restore();
+
+    // --- Draw particles ---
+    for (let i = state.particles.length - 1; i >= 0; i--) {
+      const p = state.particles[i];
+      p.x += p.vx;
+      p.y += p.vy;
+      p.vy += 0.05;
+      p.life--;
+      const alpha = Math.max(0, p.life / p.maxLife);
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = p.color;
+      if (p.type === 'star') {
+        drawStar(ctx, p.x, p.y, 5, p.size, p.size * 0.5);
+      } else {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size * alpha, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      if (p.life <= 0) state.particles.splice(i, 1);
+    }
+    ctx.globalAlpha = 1;
+
+    // --- Jump flair text ---
+    if (d.jumping) {
+      const flairAlpha = Math.max(0, Math.min(1, -d.vy / 12));
+      ctx.save();
+      ctx.globalAlpha = flairAlpha * 0.8;
+      ctx.fillStyle = '#ffcb47';
+      ctx.font = 'bold 16px JetBrains Mono, monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('+50 ✨', bx, by - 30 + d.vy);
+      ctx.restore();
+    }
+
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.font = '14px JetBrains Mono, monospace';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'top';
+    ctx.fillText(`Score: ${state.score}`, canvas.width - 10, 10);
+
+    let speedLabel = 'Normal';
+    let speedColor = '#4a9eff';
+    if (state.score >= 3500) { speedLabel = '\ud83d\udd2e OVERLY INSANE'; speedColor = '#ff0000'; }
+    else if (state.score >= 1500) { speedLabel = '\ud83e\udd96 INSANE'; speedColor = '#ff4545'; }
+    else if (state.score >= 500) { speedLabel = '\u26a1 Fast'; speedColor = '#f59e0b'; }
+    ctx.fillStyle = speedColor;
+    ctx.textAlign = 'left';
+    ctx.fillText(speedLabel, 10, 10);
+  }
+
+  function drawStar(ctx, cx, cy, spikes, outerR, innerR) {
+    let rot = Math.PI / 2 * 3;
+    const step = Math.PI / spikes;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - outerR);
+    for (let i = 0; i < spikes; i++) {
+      ctx.lineTo(cx + Math.cos(rot) * outerR, cy + Math.sin(rot) * outerR);
+      rot += step;
+      ctx.lineTo(cx + Math.cos(rot) * innerR, cy + Math.sin(rot) * innerR);
+      rot += step;
+    }
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function loop() {
+    if (!state) return;
+    if (state.gameOver) {
+      draw();
+      // win if player survived to max score, otherwise loss
+      state.onEnd(state.score >= MAX_SCORE, state.score);
+      return;
+    }
+    update();
+    draw();
+    animId = requestAnimationFrame(loop);
+  }
+
+  function destroy() {
+    if (animId) cancelAnimationFrame(animId);
+    document.removeEventListener('keydown', onKeyDino);
+    if (canvas) {
+      canvas.removeEventListener('click', jumpDino);
+      canvas.removeEventListener('touchstart', jumpDino);
+    }
+    state = null;
   }
 
   return { init, destroy };

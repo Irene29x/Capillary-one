@@ -54,8 +54,13 @@ const GAMES_META = {
     desc: 'A bar oscillates across the screen. Stop it in the green zone at the perfect moment to maximize your launch score.',
     controls: 'Press SPACEBAR or click LAUNCH — stop the bar in the zone',
     scoreLabel: 'Score',
-  },
-};
+  },  dino: {
+    name: 'Dino Chase',
+    icon: '🦕',
+    desc: 'Run as far as you can! Jump over trees to survive. Speed ramps up after 300 and goes turbo after 1000. Can you reach 2,500?',
+    controls: 'SPACEBAR / Tap / Click — jump',
+    scoreLabel: 'Score',
+  },};
 
 // ── DOM helpers ───────────────────────────────────────────────
 const $ = id => document.getElementById(id);
@@ -216,11 +221,11 @@ function updateBestScores() {
 
 // ── Ticker ────────────────────────────────────────────────────
 function updateTicker() {
-  const sorted = [...State.scores].sort((a,b) => b.score - a.score);
-  const top = sorted[0];
-  const text = top
-    ? `🏆 Top Scorer: ${top.name} (${top.score.toLocaleString()} pts) ${Array(3).fill('&nbsp;·&nbsp;').join('')} Games Played: ${State.scores.length} &nbsp;·&nbsp; #OneCapillary &nbsp;·&nbsp; Who's next? &nbsp;·&nbsp;`
-    : `🏆 Top Scorer: — &nbsp;·&nbsp; Games Played: 0 &nbsp;·&nbsp; #OneCapillary &nbsp;·&nbsp; Ready to play? Choose your game below! &nbsp;·&nbsp;`;
+  const playerTotals = calcPlayerTotals(State.scores);
+  const topEntry = Object.entries(playerTotals).sort((a,b) => b[1].total - a[1].total)[0];
+  const text = topEntry
+    ? `🏆 Top Scorer: ${topEntry[0]} (${topEntry[1].total.toLocaleString()} pts) &nbsp;·&nbsp; #OneCapillary &nbsp;·&nbsp; Who's next? &nbsp;·&nbsp;`
+    : `🏆 Top Scorer: — &nbsp;·&nbsp; #OneCapillary &nbsp;·&nbsp; Ready to play? Choose your game below! &nbsp;·&nbsp;`;
   [$('ticker-text'), $('ticker-text-clone')].forEach(el => {
     if (el) el.innerHTML = text;
   });
@@ -513,7 +518,7 @@ function updateHeaderUser() {
   const el = $('header-user');
   const nameEl = $('header-user-name');
   if (State.playerName && State.playerName !== 'Guest') {
-    nameEl.textContent = `⭐ ${State.playerName}`;
+    nameEl.textContent = `Welcome ${State.playerName}`;
     el.style.display = 'flex';
   } else {
     el.style.display = 'none';

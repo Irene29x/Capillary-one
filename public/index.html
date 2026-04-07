@@ -45,10 +45,10 @@
     <div class="ticker-bar">
       <div class="ticker-track" id="ticker-track">
         <span class="ticker-content" id="ticker-text">
-          🏆 Top Scorer: — &nbsp;·&nbsp; Games Played: 0 &nbsp;·&nbsp; #OneCapillary &nbsp;·&nbsp; Ready to play? Choose your game below! &nbsp;·&nbsp;
+          🏆 Top Scorer: — &nbsp;·&nbsp; #OneCapillary &nbsp;·&nbsp; Ready to play? Choose your game below! &nbsp;·&nbsp;
         </span>
         <span class="ticker-content" aria-hidden="true" id="ticker-text-clone">
-          🏆 Top Scorer: — &nbsp;·&nbsp; Games Played: 0 &nbsp;·&nbsp; #OneCapillary &nbsp;·&nbsp; Ready to play? Choose your game below! &nbsp;·&nbsp;
+          🏆 Top Scorer: — &nbsp;·&nbsp; #OneCapillary &nbsp;·&nbsp; Ready to play? Choose your game below! &nbsp;·&nbsp;
         </span>
       </div>
     </div>
@@ -160,10 +160,26 @@
                 <span class="game-icon">🚀</span>
               </div>
               <h3 class="game-name">Campaign Launch</h3>
-              <p class=\"game-desc\">A bar oscillates across the screen. Press SPACEBAR or click to stop it in the target zone at the perfect moment to maximize your launch score.</p>
+              <p class="game-desc">A bar oscillates across the screen. Press SPACEBAR or click to stop it in the target zone at the perfect moment to maximize your launch score.</p>
               <div class="game-meta">
                 <span class="game-hs-label">Best Score</span>
                 <span class="game-hs-val" id="hs-timing">—</span>
+              </div>
+              <button class="play-btn">Play Now</button>
+            </div>
+          </div>
+
+          <div class="game-card game-card--wide" data-game="dino">
+            <div class="game-card-glow"></div>
+            <div class="game-card-inner">
+              <div class="game-icon-wrap">
+                <span class="game-icon">🦕</span>
+              </div>
+              <h3 class="game-name">Dino Chase</h3>
+              <p class="game-desc">Run as far as you can! Jump over trees to survive. Speed ramps up after 500 and goes turbo past 1500. Can you reach 10,000?</p>
+              <div class="game-meta">
+                <span class="game-hs-label">Best Score</span>
+                <span class="game-hs-val" id="hs-dino">—</span>
               </div>
               <button class="play-btn">Play Now</button>
             </div>
@@ -193,6 +209,7 @@
             <option value="memory">Match Matrix</option>
             <option value="mines">Risk vs Reward</option>
             <option value="timing">Campaign Launch</option>
+            <option value="dino">Dino Chase</option>
           </select>
           <div class="period-btns">
             <button class="period-btn" data-period="today">Today</button>
