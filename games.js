@@ -436,9 +436,10 @@ GAME_ENGINES.reaction = (function () {
       let runningScore;
       if (runningAvg <= 150) runningScore = 2500;
       else if (runningAvg <= 200) runningScore = Math.round(2500 - (runningAvg - 150) * 10);
-      else if (runningAvg <= 300) runningScore = Math.round(2000 - (runningAvg - 200) * 8);
-      else if (runningAvg <= 500) runningScore = Math.round(1200 - (runningAvg - 300) * 3.5);
-      else runningScore = Math.max(0, Math.round(500 - (runningAvg - 500) * 1.5));
+      else if (runningAvg <= 300) runningScore = Math.round(2000 - (runningAvg - 200) * 5);
+      else if (runningAvg <= 500) runningScore = Math.round(1700 - (runningAvg - 300) * 1);
+      else runningScore = 1500;
+      runningScore = Math.max(1500, runningScore);
       state.onScore(runningScore);
       padEl.className = 'reaction-pad waiting';
       labelEl.textContent = `${Math.round(rt)} ms!`;
@@ -454,9 +455,10 @@ GAME_ENGINES.reaction = (function () {
     let score;
     if (avg <= 150) score = 2500;
     else if (avg <= 200) score = Math.round(2500 - (avg - 150) * 10);
-    else if (avg <= 300) score = Math.round(2000 - (avg - 200) * 8);
-    else if (avg <= 500) score = Math.round(1200 - (avg - 300) * 3.5);
-    else score = Math.max(0, Math.round(500 - (avg - 500) * 1.5));
+    else if (avg <= 300) score = Math.round(2000 - (avg - 200) * 5);
+    else if (avg <= 500) score = Math.round(1700 - (avg - 300) * 1);
+    else score = 1500;
+    score = Math.max(1500, score);
     state.onEnd(true, score);
   }
 
