@@ -57,7 +57,7 @@ const GAMES_META = {
   },  dino: {
     name: 'Dino Chase',
     icon: '🦕',
-    desc: 'Run as far as you can! Jump over trees to survive. Speed ramps up after 300 and goes turbo after 1000. Can you reach 2,500?',
+    desc: 'Run as far as you can! Jump over trees to survive. Getting past 2,500 is nearly impossible — do you dare?',
     controls: 'SPACEBAR / Tap / Click — jump',
     scoreLabel: 'Score',
   },};
@@ -223,9 +223,10 @@ function updateBestScores() {
 function updateTicker() {
   const playerTotals = calcPlayerTotals(State.scores);
   const topEntry = Object.entries(playerTotals).sort((a,b) => b[1].total - a[1].total)[0];
+  const totalPlayed = State.scores.length;
   const text = topEntry
-    ? `🏆 Top Scorer: ${topEntry[0]} (${topEntry[1].total.toLocaleString()} pts) &nbsp;·&nbsp; #OneCapillary &nbsp;·&nbsp; Who's next? &nbsp;·&nbsp;`
-    : `🏆 Top Scorer: — &nbsp;·&nbsp; #OneCapillary &nbsp;·&nbsp; Ready to play? Choose your game below! &nbsp;·&nbsp;`;
+    ? `🏆 Top Scorer: ${topEntry[0]} (${topEntry[1].total.toLocaleString()} pts) &nbsp;·&nbsp; Games Played: ${totalPlayed} &nbsp;·&nbsp; #OneCapillary &nbsp;·&nbsp; Who's next? &nbsp;·&nbsp;`
+    : `🏆 Top Scorer: — &nbsp;·&nbsp; Games Played: 0 &nbsp;·&nbsp; #OneCapillary &nbsp;·&nbsp; Ready to play? Choose your game below! &nbsp;·&nbsp;`;
   [$('ticker-text'), $('ticker-text-clone')].forEach(el => {
     if (el) el.innerHTML = text;
   });

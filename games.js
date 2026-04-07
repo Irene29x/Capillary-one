@@ -434,12 +434,11 @@ GAME_ENGINES.reaction = (function () {
       // Compute running scaled score from rounds so far and report it
       const runningAvg = state.times.reduce((a, b) => a + b, 0) / state.times.length;
       let runningScore;
-      if (runningAvg <= 120) runningScore = 2500;
-      else if (runningAvg <= 150) runningScore = Math.round(2500 - (runningAvg - 120) * 20);
-      else if (runningAvg <= 200) runningScore = Math.round(1900 - (runningAvg - 150) * 12);
-      else if (runningAvg <= 300) runningScore = Math.round(1300 - (runningAvg - 200) * 6);
-      else if (runningAvg <= 500) runningScore = Math.round(700 - (runningAvg - 300) * 2.5);
-      else runningScore = Math.max(0, Math.round(200 - (runningAvg - 500) * 0.5));
+      if (runningAvg <= 150) runningScore = 2500;
+      else if (runningAvg <= 200) runningScore = Math.round(2500 - (runningAvg - 150) * 10);
+      else if (runningAvg <= 300) runningScore = Math.round(2000 - (runningAvg - 200) * 8);
+      else if (runningAvg <= 500) runningScore = Math.round(1200 - (runningAvg - 300) * 3.5);
+      else runningScore = Math.max(0, Math.round(500 - (runningAvg - 500) * 1.5));
       state.onScore(runningScore);
       padEl.className = 'reaction-pad waiting';
       labelEl.textContent = `${Math.round(rt)} ms!`;
@@ -453,12 +452,11 @@ GAME_ENGINES.reaction = (function () {
     const avg = state.times.reduce((a,b) => a+b, 0) / state.times.length;
     // Score: lower ms = higher score (max 2500, very hard to reach — need sub-120ms avg)
     let score;
-    if (avg <= 120) score = 2500;
-    else if (avg <= 150) score = Math.round(2500 - (avg - 120) * 20);
-    else if (avg <= 200) score = Math.round(1900 - (avg - 150) * 12);
-    else if (avg <= 300) score = Math.round(1300 - (avg - 200) * 6);
-    else if (avg <= 500) score = Math.round(700 - (avg - 300) * 2.5);
-    else score = Math.max(0, Math.round(200 - (avg - 500) * 0.5));
+    if (avg <= 150) score = 2500;
+    else if (avg <= 200) score = Math.round(2500 - (avg - 150) * 10);
+    else if (avg <= 300) score = Math.round(2000 - (avg - 200) * 8);
+    else if (avg <= 500) score = Math.round(1200 - (avg - 300) * 3.5);
+    else score = Math.max(0, Math.round(500 - (avg - 500) * 1.5));
     state.onEnd(true, score);
   }
 
@@ -629,7 +627,7 @@ GAME_ENGINES.mines = (function () {
       tiles: [],
       safeRevealed: 0,
       multiplier: 1,
-      baseScore: 100,
+      baseScore: 300,
       gameOver: false,
       onScore,
       onEnd,
@@ -697,10 +695,10 @@ GAME_ENGINES.mines = (function () {
       tile.classList.add('safe');
       tile.textContent = '✅';
       state.safeRevealed++;
-      state.multiplier = 1 + state.safeRevealed * 0.55;
-      const currentScore = Math.min(2500, Math.round(state.baseScore * state.multiplier));
+      state.multiplier = state.safeRevealed;
+      const currentScore = Math.min(2500, state.baseScore * state.safeRevealed);
       state.onScore(currentScore);
-      state.infoEl.textContent = `Multiplier: ×${state.multiplier.toFixed(1)} — Score: ${currentScore} pts`;
+      state.infoEl.textContent = `Score: ${currentScore} pts — (${state.safeRevealed} safe tile${state.safeRevealed !== 1 ? 's' : ''} × 300)`;
     }
 
     // Check if all non-bomb tiles are revealed
@@ -999,16 +997,16 @@ GAME_ENGINES.dino = (function () {
 
   function updateSpeed() {
     const s = state.score;
-    if (s >= 3500) {
-      // OVERLY INSANE: speed ramps 18 → 30 between 3500-5000
-      const progress = Math.min(1, (s - 3500) / 1500);
-      state.speed = 18 + progress * 12;         // 18 → 30
-      state.spawnInterval = MIN_SPAWN_GAP;       // absolute tightest gaps
+    if (s >= 2500) {
+      // IMPOSSIBLE: speed ramps 20 → 35 between 2500-5000
+      const progress = Math.min(1, (s - 2500) / 2500);
+      state.speed = 20 + progress * 15;         // 20 → 35
+      state.spawnInterval = MIN_SPAWN_GAP;       // no breathing room
     } else if (s >= 1500) {
-      // INSANE: speed ramps 11 → 18 between 1500-3500
-      const progress = (s - 1500) / 2000;
-      state.speed = 11 + progress * 7;          // 11 → 18
-      state.spawnInterval = Math.max(MIN_SPAWN_GAP, Math.round(55 - progress * 5));
+      // OVERLY INSANE: speed ramps 14 → 20 between 1500-2500
+      const progress = (s - 1500) / 1000;
+      state.speed = 14 + progress * 6;          // 14 → 20
+      state.spawnInterval = MIN_SPAWN_GAP;       // tightest gaps
     } else if (s >= 500) {
       // Fast: speed ramps 6 → 9 between 500-1500
       const progress = (s - 500) / 1000;
@@ -1233,8 +1231,8 @@ GAME_ENGINES.dino = (function () {
 
     let speedLabel = 'Normal';
     let speedColor = '#4a9eff';
-    if (state.score >= 3500) { speedLabel = '\ud83d\udd2e OVERLY INSANE'; speedColor = '#ff0000'; }
-    else if (state.score >= 1500) { speedLabel = '\ud83e\udd96 INSANE'; speedColor = '#ff4545'; }
+    if (state.score >= 2500) { speedLabel = '\u2620\ufe0f IMPOSSIBLE'; speedColor = '#ff0000'; }
+    else if (state.score >= 1500) { speedLabel = '\ud83d\udd2e OVERLY INSANE'; speedColor = '#ff4545'; }
     else if (state.score >= 500) { speedLabel = '\u26a1 Fast'; speedColor = '#f59e0b'; }
     ctx.fillStyle = speedColor;
     ctx.textAlign = 'left';
