@@ -461,27 +461,35 @@ body {
 .play-btn:active { transform: scale(0.99); }
 
 /* ── Leaderboard ───────────────────────────────────────────── */
+.board-tabs-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin-bottom: 24px;
+  scrollbar-width: none;
+}
+.board-tabs-wrap::-webkit-scrollbar { display: none; }
 .board-tabs {
   display: flex;
-  gap: 8px;
-  margin-bottom: 24px;
+  gap: 6px;
   background: var(--glass);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-sm);
   padding: 6px;
-  width: fit-content;
+  width: max-content;
+  min-width: 100%;
 }
 .board-tab {
   background: transparent;
   border: none;
   color: var(--text-sub);
   font-family: var(--font);
-  font-size: 0.875rem;
+  font-size: 0.82rem;
   font-weight: 600;
-  padding: 8px 20px;
+  padding: 8px 16px;
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s;
+  white-space: nowrap;
 }
 .board-tab:hover { color: var(--text); }
 .board-tab.active {

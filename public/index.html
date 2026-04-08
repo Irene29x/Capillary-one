@@ -195,22 +195,20 @@
           <p class="section-sub">Rankings update after every game. Be the one on top.</p>
         </div>
 
-        <div class="board-tabs">
-          <button class="board-tab active" data-board="individual">Individual</button>
-          <button class="board-tab" data-board="team">By Team</button>
-          <button class="board-tab" data-board="overall">Overall</button>
+        <div class="board-tabs-wrap">
+          <div class="board-tabs">
+            <button class="board-tab active" data-board="overall">🏆 Overall</button>
+            <button class="board-tab" data-board="team">🏢 By Team</button>
+            <button class="board-tab" data-board="cashflow">💰 Cashflow Chase</button>
+            <button class="board-tab" data-board="reaction">⚡ Trigger Time</button>
+            <button class="board-tab" data-board="memory">🃏 Match Matrix</button>
+            <button class="board-tab" data-board="mines">💣 Risk vs Reward</button>
+            <button class="board-tab" data-board="timing">🚀 Campaign Launch</button>
+            <button class="board-tab" data-board="dino">🦕 Dino Chase</button>
+          </div>
         </div>
 
         <div class="board-filters">
-          <select id="game-filter" class="filter-select">
-            <option value="">All Games</option>
-            <option value="cashflow">Cashflow Chase</option>
-            <option value="reaction">Trigger Time</option>
-            <option value="memory">Match Matrix</option>
-            <option value="mines">Risk vs Reward</option>
-            <option value="timing">Campaign Launch</option>
-            <option value="dino">Dino Chase</option>
-          </select>
           <div class="period-btns">
             <button class="period-btn" data-period="today">Today</button>
             <button class="period-btn" data-period="week">This Week</button>
@@ -218,7 +216,7 @@
           </div>
         </div>
 
-        <div id="board-individual" class="board-panel active">
+        <div id="board-overall" class="board-panel active">
           <div class="board-table-wrap">
             <table class="board-table">
               <thead>
@@ -226,11 +224,11 @@
                   <th class="col-rank">#</th>
                   <th>Player</th>
                   <th>Team</th>
-                  <th>Game</th>
-                  <th class="col-score">Score</th>
+                  <th>Games Played</th>
+                  <th class="col-score">Total Score</th>
                 </tr>
               </thead>
-              <tbody id="individual-rows">
+              <tbody id="overall-rows">
                 <tr><td colspan="5" class="empty-row">No scores yet — be the first to play!</td></tr>
               </tbody>
             </table>
@@ -256,7 +254,7 @@
           </div>
         </div>
 
-        <div id="board-overall" class="board-panel">
+        <div id="board-cashflow" class="board-panel">
           <div class="board-table-wrap">
             <table class="board-table">
               <thead>
@@ -264,12 +262,101 @@
                   <th class="col-rank">#</th>
                   <th>Player</th>
                   <th>Team</th>
-                  <th>Games</th>
-                  <th class="col-score">Composite</th>
+                  <th class="col-score">Best Score</th>
                 </tr>
               </thead>
-              <tbody id="overall-rows">
-                <tr><td colspan="5" class="empty-row">No data yet</td></tr>
+              <tbody id="cashflow-rows">
+                <tr><td colspan="4" class="empty-row">No scores yet — be the first to play!</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="board-reaction" class="board-panel">
+          <div class="board-table-wrap">
+            <table class="board-table">
+              <thead>
+                <tr>
+                  <th class="col-rank">#</th>
+                  <th>Player</th>
+                  <th>Team</th>
+                  <th class="col-score">Best Score</th>
+                </tr>
+              </thead>
+              <tbody id="reaction-rows">
+                <tr><td colspan="4" class="empty-row">No scores yet — be the first to play!</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="board-memory" class="board-panel">
+          <div class="board-table-wrap">
+            <table class="board-table">
+              <thead>
+                <tr>
+                  <th class="col-rank">#</th>
+                  <th>Player</th>
+                  <th>Team</th>
+                  <th class="col-score">Best Score</th>
+                </tr>
+              </thead>
+              <tbody id="memory-rows">
+                <tr><td colspan="4" class="empty-row">No scores yet — be the first to play!</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="board-mines" class="board-panel">
+          <div class="board-table-wrap">
+            <table class="board-table">
+              <thead>
+                <tr>
+                  <th class="col-rank">#</th>
+                  <th>Player</th>
+                  <th>Team</th>
+                  <th class="col-score">Best Score</th>
+                </tr>
+              </thead>
+              <tbody id="mines-rows">
+                <tr><td colspan="4" class="empty-row">No scores yet — be the first to play!</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="board-timing" class="board-panel">
+          <div class="board-table-wrap">
+            <table class="board-table">
+              <thead>
+                <tr>
+                  <th class="col-rank">#</th>
+                  <th>Player</th>
+                  <th>Team</th>
+                  <th class="col-score">Best Score</th>
+                </tr>
+              </thead>
+              <tbody id="timing-rows">
+                <tr><td colspan="4" class="empty-row">No scores yet — be the first to play!</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="board-dino" class="board-panel">
+          <div class="board-table-wrap">
+            <table class="board-table">
+              <thead>
+                <tr>
+                  <th class="col-rank">#</th>
+                  <th>Player</th>
+                  <th>Team</th>
+                  <th class="col-score">Best Score</th>
+                </tr>
+              </thead>
+              <tbody id="dino-rows">
+                <tr><td colspan="4" class="empty-row">No scores yet — be the first to play!</td></tr>
               </tbody>
             </table>
           </div>

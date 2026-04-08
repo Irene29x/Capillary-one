@@ -6,6 +6,24 @@
 
 'use strict';
 
+// ── roundRect polyfill for older Canvas implementations ───────
+if (typeof CanvasRenderingContext2D !== 'undefined' && !CanvasRenderingContext2D.prototype.roundRect) {
+  CanvasRenderingContext2D.prototype.roundRect = function(x, y, w, h, r) {
+    r = Math.min(r, w / 2, h / 2);
+    this.moveTo(x + r, y);
+    this.lineTo(x + w - r, y);
+    this.quadraticCurveTo(x + w, y, x + w, y + r);
+    this.lineTo(x + w, y + h - r);
+    this.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    this.lineTo(x + r, y + h);
+    this.quadraticCurveTo(x, y + h, x, y + h - r);
+    this.lineTo(x, y + r);
+    this.quadraticCurveTo(x, y, x + r, y);
+    this.closePath();
+    return this;
+  };
+}
+
 // ── Game Registry ─────────────────────────────────────────────
 const GAME_ENGINES = {};
 
@@ -80,7 +98,7 @@ GAME_ENGINES.cashflow = (function () {
       lastSpawnTime: Date.now(),
       spawnInterval: 7000,
       enemyDelay: 10,
-      timeLimit: 45,
+      timeLimit: 120,
     };
 
     // Load logo image
@@ -257,11 +275,33 @@ GAME_ENGINES.cashflow = (function () {
     const remaining = Math.max(0, state.timeLimit - elapsedSec);
     const mins = Math.floor(remaining / 60);
     const secs = remaining % 60;
-    ctx.fillStyle = remaining <= 10 ? 'rgba(255,69,69,0.9)' : 'rgba(255,255,255,0.7)';
-    ctx.font = '13px JetBrains Mono, monospace';
+    const timerStr = `${mins}:${secs.toString().padStart(2,'0')}`;
+
+    // Background pill for HUD
+    const hudY = 4;
+    ctx.fillStyle = 'rgba(10,11,20,0.72)';
+    ctx.beginPath();
+    ctx.roundRect(canvas.width - 230, hudY, 222, 34, 8);
+    ctx.fill();
+
+    ctx.font = 'bold 18px JetBrains Mono, monospace';
     ctx.textAlign = 'right';
-    ctx.textBaseline = 'top';
-    ctx.fillText(`⏱ ${mins}:${secs.toString().padStart(2,'0')}  👻 ${state.enemies.length}`, canvas.width - 8, 6);
+    ctx.textBaseline = 'middle';
+    const hudMid = hudY + 17;
+    // Timer
+    ctx.fillStyle = remaining <= 15 ? '#ff4545' : '#ffffff';
+    ctx.fillText(`⏱ ${timerStr}`, canvas.width - 130, hudMid);
+    // Ghosts
+    ctx.fillStyle = '#a855f7';
+    ctx.fillText(`👻 ${state.enemies.length}`, canvas.width - 60, hudMid);
+    // Lives — draw on left side
+    ctx.fillStyle = 'rgba(10,11,20,0.72)';
+    ctx.beginPath();
+    ctx.roundRect(6, hudY, 100, 34, 8);
+    ctx.fill();
+    ctx.fillStyle = '#ff4545';
+    ctx.textAlign = 'left';
+    ctx.fillText(`❤️  ×${state.lives}`, 12, hudMid);
 
     // Player (logo or fallback)
     if (logoImg && logoImg.complete && logoImg.naturalWidth > 0) {
@@ -309,7 +349,7 @@ GAME_ENGINES.cashflow = (function () {
       draw();
       // Final score: coins + time bonus + lives bonus + completion bonus, cap at 2500
       const remainingSec = Math.max(0, state.timeLimit - elapsed);
-      const finalScore = Math.min(2500, state.score + remainingSec * 30 + state.lives * 200 + 200);
+      const finalScore = state.score + remainingSec * 30 + state.lives * 200 + 200;
       state.onEnd(true, finalScore);
       return;
     }
@@ -435,11 +475,11 @@ GAME_ENGINES.reaction = (function () {
       const runningAvg = state.times.reduce((a, b) => a + b, 0) / state.times.length;
       let runningScore;
       if (runningAvg <= 150) runningScore = 2500;
-      else if (runningAvg <= 200) runningScore = Math.round(2500 - (runningAvg - 150) * 10);
-      else if (runningAvg <= 300) runningScore = Math.round(2000 - (runningAvg - 200) * 5);
-      else if (runningAvg <= 500) runningScore = Math.round(1700 - (runningAvg - 300) * 1);
-      else runningScore = 1500;
-      runningScore = Math.max(1500, runningScore);
+      else if (runningAvg <= 200) runningScore = Math.round(2500 - (runningAvg - 150) * 20);
+      else if (runningAvg <= 300) runningScore = Math.round(1500 - (runningAvg - 200) * 10);
+      else if (runningAvg <= 500) runningScore = Math.round(500 - (runningAvg - 300) * 2);
+      else runningScore = Math.max(10, Math.round(500 - (runningAvg - 500)));
+      runningScore = Math.max(10, runningScore);
       state.onScore(runningScore);
       padEl.className = 'reaction-pad waiting';
       labelEl.textContent = `${Math.round(rt)} ms!`;
@@ -451,14 +491,14 @@ GAME_ENGINES.reaction = (function () {
   function finish() {
     if (!state) return;
     const avg = state.times.reduce((a,b) => a+b, 0) / state.times.length;
-    // Score: lower ms = higher score (max 2500, very hard to reach — need sub-120ms avg)
+    // Score: lower ms = higher score (max 2500 for sub-150ms avg, floors at 10)
     let score;
     if (avg <= 150) score = 2500;
-    else if (avg <= 200) score = Math.round(2500 - (avg - 150) * 10);
-    else if (avg <= 300) score = Math.round(2000 - (avg - 200) * 5);
-    else if (avg <= 500) score = Math.round(1700 - (avg - 300) * 1);
-    else score = 1500;
-    score = Math.max(1500, score);
+    else if (avg <= 200) score = Math.round(2500 - (avg - 150) * 20);
+    else if (avg <= 300) score = Math.round(1500 - (avg - 200) * 10);
+    else if (avg <= 500) score = Math.round(500 - (avg - 300) * 2);
+    else score = Math.max(10, Math.round(500 - (avg - 500)));
+    score = Math.max(10, score);
     state.onEnd(true, score);
   }
 
@@ -509,6 +549,7 @@ GAME_ENGINES.memory = (function () {
       flipped: [],
       matched: 0,
       moves: 0,
+      wrongMoves: 0,
       locked: false,
       onScore,
       onEnd,
@@ -545,6 +586,7 @@ GAME_ENGINES.memory = (function () {
       state.locked = true;
       const [a, b] = state.flipped;
       if (state.cards[a].sym === state.cards[b].sym) {
+        // Correct match — no penalty, no point gain from match itself
         state.cards[a].matched = true;
         state.cards[b].matched = true;
         state.cards[a].el.classList.add('matched');
@@ -552,16 +594,19 @@ GAME_ENGINES.memory = (function () {
         state.matched++;
         state.flipped = [];
         state.locked = false;
-        // Unified formula: same as final score so live display is consistent
-        const score = Math.max(50, Math.round(2500 - (state.moves - 12) * 80));
+        const score = Math.max(50, 2500 - state.wrongMoves * 50);
         state.onScore(score);
         if (state.matched === EMOJIS.length) {
           setTimeout(() => {
-            const finalScore = Math.max(50, Math.round(2500 - (state.moves - 12) * 80));
+            const finalScore = Math.max(50, 2500 - state.wrongMoves * 50);
             state.onEnd(true, finalScore);
           }, 500);
         }
       } else {
+        // Wrong match — deduct 50 immediately and update score in real time
+        state.wrongMoves++;
+        const score = Math.max(50, 2500 - state.wrongMoves * 50);
+        state.onScore(score);
         setTimeout(() => {
           if (!state) return;
           state.cards[a].el.classList.remove('flipped');
@@ -900,7 +945,7 @@ GAME_ENGINES.dino = (function () {
   const BFLY_H = 40;
   const GRAVITY = 0.6;
   const JUMP_FORCE = -12;
-  const MAX_SCORE = 5000;
+  // No score cap — score grows freely; 2500+ is just extremely difficult
   // Minimum frames between obstacles = jump duration + landing buffer
   const JUMP_FRAMES = Math.ceil(2 * Math.abs(JUMP_FORCE) / GRAVITY); // 40
   const MIN_SPAWN_GAP = JUMP_FRAMES + 10; // 50 frames — always jumpable
@@ -974,14 +1019,13 @@ GAME_ENGINES.dino = (function () {
       state.dino.jumping = true;
       state.jumpCount++;
       state.score += 50;
-      if (state.score >= MAX_SCORE) state.score = MAX_SCORE;
       state.onScore(state.score);
       updateSpeed();
       spawnJumpParticles();
     }
   }
 
-  function spawnTree() {
+  function spawnTree(xOffset) {
     const types = [
       { w: 20, h: 40 },
       { w: 28, h: 55 },
@@ -989,20 +1033,27 @@ GAME_ENGINES.dino = (function () {
     ];
     const t = types[Math.floor(Math.random() * types.length)];
     state.obstacles.push({
-      x: canvas.width + 20,
+      x: canvas.width + 20 + (xOffset || 0),
       y: state.groundY - t.h,
       w: t.w,
       h: t.h,
       scored: false,
     });
+    return t.w;
+  }
+
+  function spawnPair() {
+    // Spawn two trees side-by-side with a tiny 12px gap — player must jump over both
+    const w1 = spawnTree(0);
+    spawnTree(w1 + 12);
   }
 
   function updateSpeed() {
     const s = state.score;
     if (s >= 2500) {
-      // IMPOSSIBLE: speed ramps 20 → 35 between 2500-5000
+      // IMPOSSIBLE: speed ramps 30 → 55 between 2500-5000, pairs always spawn
       const progress = Math.min(1, (s - 2500) / 2500);
-      state.speed = 20 + progress * 15;         // 20 → 35
+      state.speed = 30 + progress * 25;         // 30 → 55
       state.spawnInterval = MIN_SPAWN_GAP;       // no breathing room
     } else if (s >= 1500) {
       // OVERLY INSANE: speed ramps 14 → 20 between 1500-2500
@@ -1039,7 +1090,11 @@ GAME_ENGINES.dino = (function () {
       const lastObs = state.obstacles[state.obstacles.length - 1];
       if (!lastObs || lastObs.x <= canvas.width - minPixelGap) {
         state.spawnTimer = 0;
-        spawnTree();
+        if (state.score >= 2500) {
+          spawnPair(); // back-to-back double tree in IMPOSSIBLE mode
+        } else {
+          spawnTree();
+        }
       }
     }
 
@@ -1067,8 +1122,8 @@ GAME_ENGINES.dino = (function () {
       }
     }
 
-    // Distance/survival bonus: +1 per frame
-    state.score = Math.min(MAX_SCORE, state.score + 1);
+    // Distance/survival bonus: +1 per frame (uncapped)
+    state.score = state.score + 1;
     state.onScore(state.score);
 
     state.frame++;
@@ -1239,6 +1294,7 @@ GAME_ENGINES.dino = (function () {
     ctx.fillStyle = speedColor;
     ctx.textAlign = 'left';
     ctx.fillText(speedLabel, 10, 10);
+    // Win condition label removed — the game runs until collision with no cap
   }
 
   function drawStar(ctx, cx, cy, spikes, outerR, innerR) {
@@ -1260,8 +1316,8 @@ GAME_ENGINES.dino = (function () {
     if (!state) return;
     if (state.gameOver) {
       draw();
-      // win if player survived to max score, otherwise loss
-      state.onEnd(state.score >= MAX_SCORE, state.score);
+      // Always end on collision — score is whatever was accumulated
+      state.onEnd(false, state.score);
       return;
     }
     update();

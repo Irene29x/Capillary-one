@@ -110,8 +110,13 @@ async function loadScores() {
   // Fallback: load from localStorage
   try {
     const saved = localStorage.getItem('capillary_playground_scores');
-    State.scores = saved ? JSON.parse(saved) : [];
-    if (!Array.isArray(State.scores)) State.scores = [];
+    let cached = saved ? JSON.parse(saved) : [];
+    if (!Array.isArray(cached)) cached = [];
+    // Ensure every cached entry has a valid ts
+    State.scores = cached.map(s => ({
+      ...s,
+      ts: s.ts || (s.created_at ? new Date(s.created_at).getTime() : 0),
+    }));
   } catch { State.scores = []; }
 }
 
@@ -241,10 +246,6 @@ function bindBoardFilters() {
       renderLeaderboard();
     });
   });
-  const gameFilter = $('game-filter');
-  if (gameFilter) {
-    gameFilter.addEventListener('change', () => renderLeaderboard());
-  }
 }
 
 function getFilteredScores() {
@@ -253,18 +254,22 @@ function getFilteredScores() {
   // Period filter
   const activeBtn = document.querySelector('.period-btn.active');
   const period = activeBtn ? activeBtn.dataset.period : 'all';
-  const now = Date.now();
-  if (period === 'today') {
-    scores = scores.filter(s => (now - s.ts) < 86400000);
-  } else if (period === 'week') {
-    scores = scores.filter(s => (now - s.ts) < 604800000);
-  }
 
-  // Game filter
-  const gameFilter = $('game-filter');
-  const selectedGame = gameFilter ? gameFilter.value : '';
-  if (selectedGame) {
-    scores = scores.filter(s => s.game === selectedGame);
+  if (period === 'today') {
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const todayMs = startOfToday.getTime();
+    scores = scores.filter(s => (s.ts || 0) >= todayMs);
+  } else if (period === 'week') {
+    const now = new Date();
+    // Start of Monday of the current week
+    const day = now.getDay(); // 0=Sun, 1=Mon …
+    const diffToMonday = (day === 0 ? -6 : 1 - day);
+    const startOfWeek = new Date(now);
+    startOfWeek.setDate(now.getDate() + diffToMonday);
+    startOfWeek.setHours(0, 0, 0, 0);
+    const weekMs = startOfWeek.getTime();
+    scores = scores.filter(s => (s.ts || 0) >= weekMs);
   }
 
   return scores;
@@ -274,33 +279,32 @@ function getFilteredScores() {
 function renderLeaderboard() {
   const filteredScores = getFilteredScores();
 
-  // Individual
-  const indEl = $('individual-rows');
-  if (indEl) {
-    if (filteredScores.length === 0) {
-      indEl.innerHTML = '<tr><td colspan="5" class="empty-row">No scores yet — be the first to play!</td></tr>';
+  // --- Overall tab: one row per player, sum of best-per-game scores ---
+  const overallEl = $('overall-rows');
+  if (overallEl) {
+    const playerTotals = calcPlayerTotals(filteredScores);
+    const ranked = Object.entries(playerTotals)
+      .map(([name, data]) => ({ name, team: data.team, gamesPlayed: Object.keys(data.games).length, total: data.total }))
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 50);
+
+    if (ranked.length === 0) {
+      overallEl.innerHTML = '<tr><td colspan="5" class="empty-row">No scores yet — be the first to play!</td></tr>';
     } else {
-      // Best score per player per game, then sort
-      const bestMap = {};
-      filteredScores.forEach(s => {
-        const key = s.name + '||' + s.game;
-        if (!bestMap[key] || s.score > bestMap[key].score) bestMap[key] = s;
-      });
-      const sorted = Object.values(bestMap).sort((a,b) => b.score - a.score).slice(0, 30);
-      indEl.innerHTML = sorted.map((s, i) => {
-        const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i+1);
-        return `<tr class="${i < 3 ? 'rank-'+(i+1) : ''}">
+      overallEl.innerHTML = ranked.map((p, i) => {
+        const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1);
+        return `<tr class="${i < 3 ? 'rank-' + (i + 1) : ''}">
           <td class="col-rank">${medal}</td>
-          <td>${escHtml(s.name)}</td>
-          <td>${escHtml(s.team)}</td>
-          <td>${escHtml(s.gameName)}</td>
-          <td class="col-score">${s.score.toLocaleString()}</td>
+          <td>${escHtml(p.name)}</td>
+          <td>${escHtml(p.team)}</td>
+          <td>${p.gamesPlayed}</td>
+          <td class="col-score">${p.total.toLocaleString()}</td>
         </tr>`;
       }).join('');
     }
   }
 
-  // Team (based on sum of each player's best-per-game totals)
+  // --- Team tab ---
   const teamEl = $('team-rows');
   if (teamEl) {
     const playerTotals = calcPlayerTotals(filteredScores);
@@ -313,11 +317,11 @@ function renderLeaderboard() {
     if (Object.keys(teamMap).length === 0) {
       teamEl.innerHTML = '<tr><td colspan="5" class="empty-row">No team data yet</td></tr>';
     } else {
-      const sorted = Object.entries(teamMap).sort((a,b) => b[1].total - a[1].total);
+      const sorted = Object.entries(teamMap).sort((a, b) => b[1].total - a[1].total);
       teamEl.innerHTML = sorted.map(([team, data], i) => {
-        const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i+1);
+        const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1);
         const avg = Math.round(data.total / data.players.size);
-        return `<tr class="${i < 3 ? 'rank-'+(i+1) : ''}">
+        return `<tr class="${i < 3 ? 'rank-' + (i + 1) : ''}">
           <td class="col-rank">${medal}</td>
           <td>${escHtml(team)}</td>
           <td>${data.players.size}</td>
@@ -328,36 +332,34 @@ function renderLeaderboard() {
     }
   }
 
-  // Overall (composite best-per-game per player)
-  const overallEl = $('overall-rows');
-  if (overallEl) {
-    const playerBest = {};
-    filteredScores.forEach(s => {
-      if (!playerBest[s.name]) playerBest[s.name] = { team: s.team, games: {} };
-      if (!playerBest[s.name].games[s.game] || s.score > playerBest[s.name].games[s.game]) {
-        playerBest[s.name].games[s.game] = s.score;
+  // --- Per-game tabs: best score per player for each game ---
+  const GAME_IDS = ['cashflow', 'reaction', 'memory', 'mines', 'timing', 'dino'];
+  GAME_IDS.forEach(game => {
+    const el = $(`${game}-rows`);
+    if (!el) return;
+    const gameScores = filteredScores.filter(s => s.game === game);
+    if (gameScores.length === 0) {
+      el.innerHTML = '<tr><td colspan="4" class="empty-row">No scores yet — be the first to play!</td></tr>';
+      return;
+    }
+    // Best score per player for this game
+    const bestMap = {};
+    gameScores.forEach(s => {
+      if (!bestMap[s.name] || s.score > bestMap[s.name].score) {
+        bestMap[s.name] = { name: s.name, team: s.team, score: s.score };
       }
     });
-    const ranked = Object.entries(playerBest).map(([name, data]) => {
-      const total = Object.values(data.games).reduce((a, b) => a + b, 0);
-      return { name, team: data.team, gamesPlayed: Object.keys(data.games).length, total };
-    }).sort((a, b) => b.total - a.total).slice(0, 30);
-
-    if (ranked.length === 0) {
-      overallEl.innerHTML = '<tr><td colspan="5" class="empty-row">No data yet</td></tr>';
-    } else {
-      overallEl.innerHTML = ranked.map((p, i) => {
-        const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i+1);
-        return `<tr class="${i < 3 ? 'rank-'+(i+1) : ''}">
-          <td class="col-rank">${medal}</td>
-          <td>${escHtml(p.name)}</td>
-          <td>${escHtml(p.team)}</td>
-          <td>${p.gamesPlayed}</td>
-          <td class="col-score">${p.total.toLocaleString()}</td>
-        </tr>`;
-      }).join('');
-    }
-  }
+    const sorted = Object.values(bestMap).sort((a, b) => b.score - a.score).slice(0, 50);
+    el.innerHTML = sorted.map((s, i) => {
+      const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1);
+      return `<tr class="${i < 3 ? 'rank-' + (i + 1) : ''}">
+        <td class="col-rank">${medal}</td>
+        <td>${escHtml(s.name)}</td>
+        <td>${escHtml(s.team)}</td>
+        <td class="col-score">${s.score.toLocaleString()}</td>
+      </tr>`;
+    }).join('');
+  });
 }
 
 // ── Players Render ────────────────────────────────────────────
