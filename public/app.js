@@ -11,6 +11,7 @@ const LOGO_B64 = 'data:image/png;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1BS
 // ── State ─────────────────────────────────────────────────────
 const State = {
   scores: [],
+  gamesPlayed: 0,
   playerName: null,
   playerTeam: null,
   currentGame: null,
@@ -60,6 +61,13 @@ const GAMES_META = {
     desc: 'Run as far as you can! Jump over trees to survive. Getting past 2,500 is nearly impossible — do you dare?',
     controls: 'SPACEBAR / Tap / Click — jump',
     scoreLabel: 'Score',
+  },
+  colorMatch: {
+    name: 'Color Match',
+    icon: '🎨',
+    desc: 'Five random colors flash on screen. Memorise them, then recreate each one using Hue, Saturation & Brightness sliders. How sharp is your colour memory?',
+    controls: 'Drag sliders — click Next / See Results',
+    scoreLabel: 'Accuracy',
   },};
 
 // ── DOM helpers ───────────────────────────────────────────────
@@ -94,25 +102,30 @@ const API_BASE = '/api/scores';
 
 async function loadScores() {
   try {
-    const res = await fetch(API_BASE);
-    if (res.ok) {
-      const data = await res.json();
+    const [scoresRes, statsRes] = await Promise.all([
+      fetch(API_BASE),
+      fetch(API_BASE + '?stats=1'),
+    ]);
+    if (scoresRes.ok) {
+      const data = await scoresRes.json();
       State.scores = (data.scores || []).map(s => ({
         ...s,
         gameName: s.game_name || GAMES_META[s.game]?.name || s.game,
         ts: new Date(s.created_at).getTime(),
       }));
-      // Sync to localStorage as offline cache
       try { localStorage.setItem('capillary_playground_scores', JSON.stringify(State.scores)); } catch {}
-      return;
     }
+    if (statsRes.ok) {
+      const statsData = await statsRes.json();
+      State.gamesPlayed = statsData.gamesPlayed || 0;
+    }
+    if (scoresRes.ok) return;
   } catch {}
   // Fallback: load from localStorage
   try {
     const saved = localStorage.getItem('capillary_playground_scores');
     let cached = saved ? JSON.parse(saved) : [];
     if (!Array.isArray(cached)) cached = [];
-    // Ensure every cached entry has a valid ts
     State.scores = cached.map(s => ({
       ...s,
       ts: s.ts || (s.created_at ? new Date(s.created_at).getTime() : 0),
@@ -193,6 +206,10 @@ function updateStats() {
   const uniquePlayers = new Set(State.scores.map(s => s.name));
   $('stat-plays-val').textContent = uniquePlayers.size;
 
+  // Games played from backend counter
+  const gamesEl = $('stat-games-val');
+  if (gamesEl) gamesEl.textContent = (State.gamesPlayed || 0).toLocaleString();
+
   if (State.scores.length === 0) {
     $('stat-top-val').textContent = '—';
     $('stat-team-val').textContent = '—';
@@ -228,7 +245,7 @@ function updateBestScores() {
 function updateTicker() {
   const playerTotals = calcPlayerTotals(State.scores);
   const topEntry = Object.entries(playerTotals).sort((a,b) => b[1].total - a[1].total)[0];
-  const totalPlayed = State.scores.length;
+  const totalPlayed = State.gamesPlayed || 0;
   const text = topEntry
     ? `🏆 Top Scorer: ${topEntry[0]} (${topEntry[1].total.toLocaleString()} pts) &nbsp;·&nbsp; Games Played: ${totalPlayed} &nbsp;·&nbsp; #OneCapillary &nbsp;·&nbsp; Who's next? &nbsp;·&nbsp;`
     : `🏆 Top Scorer: — &nbsp;·&nbsp; Games Played: 0 &nbsp;·&nbsp; #OneCapillary &nbsp;·&nbsp; Ready to play? Choose your game below! &nbsp;·&nbsp;`;
@@ -641,6 +658,12 @@ function showGameOver(won, score) {
   panel.style.display = 'flex';
   panel.style.animation = 'none';
   setTimeout(() => panel.style.animation = '', 10);
+
+  // Increment games played counter (always, regardless of Guest/score)
+  State.gamesPlayed = (State.gamesPlayed || 0) + 1;
+  updateStats();
+  updateTicker();
+  fetch(API_BASE + '?action=increment_played', { method: 'POST' }).catch(() => {});
 
   // Auto-save score (skip Guests)
   if (score > 0 && State.playerName && State.playerName !== 'Guest') {

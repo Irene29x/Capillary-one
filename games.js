@@ -900,7 +900,7 @@ GAME_ENGINES.dino = (function () {
   const BFLY_H = 40;
   const GRAVITY = 0.6;
   const JUMP_FORCE = -12;
-  const MAX_SCORE = 5000;
+  // No MAX_SCORE — game runs unlimited
   // Minimum frames between obstacles = jump duration + landing buffer
   const JUMP_FRAMES = Math.ceil(2 * Math.abs(JUMP_FORCE) / GRAVITY); // 40
   const MIN_SPAWN_GAP = JUMP_FRAMES + 10; // 50 frames — always jumpable
@@ -974,7 +974,6 @@ GAME_ENGINES.dino = (function () {
       state.dino.jumping = true;
       state.jumpCount++;
       state.score += 50;
-      if (state.score >= MAX_SCORE) state.score = MAX_SCORE;
       state.onScore(state.score);
       updateSpeed();
       spawnJumpParticles();
@@ -995,15 +994,26 @@ GAME_ENGINES.dino = (function () {
       h: t.h,
       scored: false,
     });
+    // After 2500 pts, spawn a second tree close behind (~30px gap)
+    if (state.score >= 2500) {
+      const t2 = types[Math.floor(Math.random() * types.length)];
+      state.obstacles.push({
+        x: canvas.width + 20 + t.w + 28,
+        y: state.groundY - t2.h,
+        w: t2.w,
+        h: t2.h,
+        scored: false,
+      });
+    }
   }
 
   function updateSpeed() {
     const s = state.score;
     if (s >= 2500) {
-      // IMPOSSIBLE: speed ramps 20 → 35 between 2500-5000
-      const progress = Math.min(1, (s - 2500) / 2500);
-      state.speed = 20 + progress * 15;         // 20 → 35
-      state.spawnInterval = MIN_SPAWN_GAP;       // no breathing room
+      // IMPOSSIBLE: speed keeps ramping past 2500, no ceiling
+      const progress = (s - 2500) / 2500;
+      state.speed = 20 + progress * 20;          // 20 → unbounded (≈40 at 5000, keeps going)
+      state.spawnInterval = MIN_SPAWN_GAP;        // tightest gap
     } else if (s >= 1500) {
       // OVERLY INSANE: speed ramps 14 → 20 between 1500-2500
       const progress = (s - 1500) / 1000;
@@ -1067,8 +1077,8 @@ GAME_ENGINES.dino = (function () {
       }
     }
 
-    // Distance/survival bonus: +1 per frame
-    state.score = Math.min(MAX_SCORE, state.score + 1);
+    // Distance/survival bonus: +1 per frame (unlimited)
+    state.score += 1;
     state.onScore(state.score);
 
     state.frame++;
@@ -1260,8 +1270,7 @@ GAME_ENGINES.dino = (function () {
     if (!state) return;
     if (state.gameOver) {
       draw();
-      // win if player survived to max score, otherwise loss
-      state.onEnd(state.score >= MAX_SCORE, state.score);
+      state.onEnd(false, state.score);
       return;
     }
     update();
@@ -1277,6 +1286,285 @@ GAME_ENGINES.dino = (function () {
       canvas.removeEventListener('touchstart', jumpDino);
     }
     state = null;
+  }
+
+  return { init, destroy };
+})();
+
+
+/* ============================================================
+   7. COLOR MATCH — Memorise 5 colours, recreate them with HSB
+      sliders. Score = accuracy across all 5 colours (max 2500)
+   ============================================================ */
+GAME_ENGINES.colorMatch = (function () {
+  let state = null;
+  let container = null;
+
+  // ── Colour helpers ──────────────────────────────────────────
+  function hsbToRgb(h, s, b) {
+    s /= 100; b /= 100;
+    const k = n => (n + h / 60) % 6;
+    const f = n => b * (1 - s * Math.max(0, Math.min(k(n), 4 - k(n), 1)));
+    return [Math.round(f(5) * 255), Math.round(f(3) * 255), Math.round(f(1) * 255)];
+  }
+
+  function hsbToHex(h, s, b) {
+    const [r, g, bl] = hsbToRgb(h, s, b);
+    return '#' + [r, g, bl].map(x => x.toString(16).padStart(2, '0')).join('');
+  }
+
+  // Perceptual distance: weighted average of circular hue + Sat + Bright deltas
+  function colorError(h1, s1, b1, h2, s2, b2) {
+    const dh = Math.min(Math.abs(h1 - h2), 360 - Math.abs(h1 - h2)) / 180; // 0-1
+    const ds = Math.abs(s1 - s2) / 100;
+    const db = Math.abs(b1 - b2) / 100;
+    return (dh * 2 + ds + db) / 4; // hue weighted more — 0-1
+  }
+
+  function calcPoints(error) {
+    // 0 error → 10 pts, 0.5+ error → 0 pts
+    return Math.max(0, parseFloat((10 * Math.max(0, 1 - error / 0.5)).toFixed(1)));
+  }
+
+  function randomColor() {
+    return {
+      h: Math.floor(Math.random() * 360),
+      s: 45 + Math.floor(Math.random() * 46), // 45-90 – vivid enough to be distinct
+      b: 45 + Math.floor(Math.random() * 46), // 45-90 – not too dark or too white
+    };
+  }
+
+  // ── Phases ──────────────────────────────────────────────────
+  function showMemorize() {
+    container.innerHTML = '';
+
+    const titleEl = document.createElement('div');
+    titleEl.className = 'cm-phase-title';
+    titleEl.textContent = 'Memorise these 5 colors!';
+
+    const swatchRow = document.createElement('div');
+    swatchRow.className = 'cm-swatch-row';
+    state.colors.forEach((c, i) => {
+      const sw = document.createElement('div');
+      sw.className = 'cm-swatch';
+      sw.style.background = hsbToHex(c.h, c.s, c.b);
+      const lbl = document.createElement('span');
+      lbl.className = 'cm-swatch-num';
+      lbl.textContent = String(i + 1);
+      sw.appendChild(lbl);
+      swatchRow.appendChild(sw);
+    });
+
+    const countEl = document.createElement('div');
+    countEl.className = 'cm-countdown';
+    countEl.textContent = state.countdown;
+
+    container.appendChild(titleEl);
+    container.appendChild(swatchRow);
+    container.appendChild(countEl);
+
+    state.countdownTimer = setInterval(() => {
+      if (!state) return;
+      state.countdown--;
+      countEl.textContent = state.countdown;
+      if (state.countdown <= 0) {
+        clearInterval(state.countdownTimer);
+        state.phase = 'guess';
+        showGuess();
+      }
+    }, 1000);
+  }
+
+  function showGuess() {
+    container.innerHTML = '';
+    const idx = state.currentIdx;
+    const total = state.colors.length;
+
+    const progEl = document.createElement('div');
+    progEl.className = 'cm-progress';
+    for (let i = 0; i < total; i++) {
+      const dot = document.createElement('div');
+      dot.className = 'cm-dot' + (i < idx ? ' done' : i === idx ? ' current' : '');
+      progEl.appendChild(dot);
+    }
+
+    const titleEl = document.createElement('div');
+    titleEl.className = 'cm-phase-title';
+    titleEl.textContent = `Recreate color ${idx + 1} of ${total}`;
+
+    const previewWrap = document.createElement('div');
+    previewWrap.className = 'cm-preview-wrap';
+
+    const blankSwatch = document.createElement('div');
+    blankSwatch.className = 'cm-swatch-blank';
+    blankSwatch.textContent = '?';
+
+    const arrowEl = document.createElement('div');
+    arrowEl.className = 'cm-arrow';
+    arrowEl.textContent = '→';
+
+    const yourSwatch = document.createElement('div');
+    yourSwatch.className = 'cm-swatch-preview';
+
+    previewWrap.appendChild(blankSwatch);
+    previewWrap.appendChild(arrowEl);
+    previewWrap.appendChild(yourSwatch);
+
+    const guess = { h: 180, s: 50, b: 50 };
+
+    function updatePreview() {
+      yourSwatch.style.background = hsbToHex(guess.h, guess.s, guess.b);
+    }
+    updatePreview();
+
+    const slidersWrap = document.createElement('div');
+    slidersWrap.className = 'cm-sliders';
+
+    [
+      { label: 'Hue',        key: 'h', min: 0,   max: 359, step: 1, hue: true },
+      { label: 'Saturation', key: 's', min: 0,   max: 100, step: 1 },
+      { label: 'Brightness', key: 'b', min: 0,   max: 100, step: 1 },
+    ].forEach(def => {
+      const row = document.createElement('div');
+      row.className = 'cm-slider-row';
+
+      const lbl = document.createElement('label');
+      lbl.className = 'cm-slider-label';
+      lbl.textContent = def.label;
+
+      const input = document.createElement('input');
+      input.type  = 'range';
+      input.className = 'cm-slider' + (def.hue ? ' cm-slider--hue' : '');
+      input.min   = def.min;
+      input.max   = def.max;
+      input.step  = def.step;
+      input.value = guess[def.key];
+
+      const valEl = document.createElement('span');
+      valEl.className = 'cm-slider-val';
+      valEl.textContent = guess[def.key];
+
+      input.addEventListener('input', () => {
+        guess[def.key] = parseInt(input.value, 10);
+        valEl.textContent = input.value;
+        updatePreview();
+      });
+
+      row.appendChild(lbl);
+      row.appendChild(input);
+      row.appendChild(valEl);
+      slidersWrap.appendChild(row);
+    });
+
+    const submitBtn = document.createElement('button');
+    submitBtn.className = 'btn-primary cm-submit';
+    submitBtn.textContent = idx < total - 1 ? 'Next Color →' : 'See Results →';
+    submitBtn.addEventListener('click', () => {
+      state.guesses.push({ ...guess });
+      state.currentIdx++;
+      if (state.currentIdx >= total) {
+        state.phase = 'results';
+        showResults();
+      } else {
+        showGuess();
+      }
+    });
+
+    container.appendChild(progEl);
+    container.appendChild(titleEl);
+    container.appendChild(previewWrap);
+    container.appendChild(slidersWrap);
+    container.appendChild(submitBtn);
+  }
+
+  function showResults() {
+    container.innerHTML = '';
+
+    const titleEl = document.createElement('div');
+    titleEl.className = 'cm-phase-title';
+    titleEl.textContent = 'Results';
+
+    const resultsGrid = document.createElement('div');
+    resultsGrid.className = 'cm-results-grid';
+
+    let total = 0;
+    state.colors.forEach((orig, i) => {
+      const g = state.guesses[i];
+      const error = colorError(orig.h, orig.s, orig.b, g.h, g.s, g.b);
+      const pts = calcPoints(error);
+      total += pts;
+
+      const row = document.createElement('div');
+      row.className = 'cm-result-row';
+
+      const numEl = document.createElement('span');
+      numEl.className = 'cm-result-num';
+      numEl.textContent = `#${i + 1}`;
+
+      const origSw = document.createElement('div');
+      origSw.className = 'cm-result-swatch';
+      origSw.style.background = hsbToHex(orig.h, orig.s, orig.b);
+      origSw.title = 'Original';
+
+      const guessSw = document.createElement('div');
+      guessSw.className = 'cm-result-swatch cm-result-swatch--guess';
+      guessSw.style.background = hsbToHex(g.h, g.s, g.b);
+      guessSw.title = 'Your guess';
+
+      const ptsEl = document.createElement('span');
+      ptsEl.className = 'cm-result-pts' + (pts >= 9 ? ' perfect' : pts >= 5 ? ' good' : '');
+      ptsEl.textContent = pts.toFixed(1) + '/10';
+
+      row.appendChild(numEl);
+      row.appendChild(origSw);
+      row.appendChild(guessSw);
+      row.appendChild(ptsEl);
+      resultsGrid.appendChild(row);
+    });
+
+    const scaledScore = Math.round((total / 50) * 2500);
+
+    const totalEl = document.createElement('div');
+    totalEl.className = 'cm-total';
+    totalEl.innerHTML = `Total: <span class="cm-total-val">${total.toFixed(1)}</span>/50`;
+
+    container.appendChild(titleEl);
+    container.appendChild(resultsGrid);
+    container.appendChild(totalEl);
+
+    state.onScore(scaledScore);
+    state.onEnd(true, scaledScore);
+  }
+
+  // ── Lifecycle ────────────────────────────────────────────────
+  function init(_canvas, onScore, onEnd) {
+    const wrap = document.getElementById('game-canvas-wrap');
+    document.getElementById('game-canvas').style.display = 'none';
+
+    container = document.createElement('div');
+    container.className = 'cm-area';
+    wrap.appendChild(container);
+
+    state = {
+      colors: Array.from({ length: 5 }, randomColor),
+      guesses: [],
+      currentIdx: 0,
+      phase: 'memorize',
+      countdown: 3,
+      countdownTimer: null,
+      onScore,
+      onEnd,
+    };
+
+    showMemorize();
+  }
+
+  function destroy() {
+    if (state && state.countdownTimer) clearInterval(state.countdownTimer);
+    if (container && container.parentNode) container.parentNode.removeChild(container);
+    document.getElementById('game-canvas').style.display = 'block';
+    state = null;
+    container = null;
   }
 
   return { init, destroy };

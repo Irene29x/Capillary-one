@@ -22,3 +22,10 @@ CREATE INDEX IF NOT EXISTS idx_scores_game ON scores(game);
 CREATE INDEX IF NOT EXISTS idx_scores_score ON scores(score DESC);
 CREATE INDEX IF NOT EXISTS idx_scores_created ON scores(created_at);
 CREATE INDEX IF NOT EXISTS idx_scores_name_game ON scores(name, game);
+
+-- Stats counters
+CREATE TABLE IF NOT EXISTS stats (
+  key   VARCHAR(30) PRIMARY KEY,
+  value INTEGER NOT NULL DEFAULT 0
+);
+INSERT INTO stats (key, value) VALUES ('games_played', 0) ON CONFLICT DO NOTHING;

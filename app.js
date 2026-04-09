@@ -60,6 +60,13 @@ const GAMES_META = {
     desc: 'Run as far as you can! Jump over trees to survive. Getting past 2,500 is nearly impossible — do you dare?',
     controls: 'SPACEBAR / Tap / Click — jump',
     scoreLabel: 'Score',
+  },
+  colorMatch: {
+    name: 'Color Match',
+    icon: '🎨',
+    desc: 'Five random colors flash on screen. Memorise them, then recreate each one using Hue, Saturation & Brightness sliders. How sharp is your colour memory?',
+    controls: 'Drag sliders — click Next / See Results',
+    scoreLabel: 'Accuracy',
   },};
 
 // ── DOM helpers ───────────────────────────────────────────────

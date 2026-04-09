@@ -27,7 +27,15 @@ export default async function handler(req, res) {
   try {
     if (req.method === 'GET') {
       // Query params: ?game=cashflow&period=today&limit=50
-      const { game, period, limit } = req.query;
+      const { game, period, limit, stats } = req.query;
+
+      // If ?stats=1, return the games_played counter
+      if (stats === '1') {
+        const row = await sql(`SELECT value FROM stats WHERE key = 'games_played'`);
+        const gamesPlayed = row.length ? row[0].value : 0;
+        return res.status(200).json({ gamesPlayed });
+      }
+
       const maxRows = Math.min(parseInt(limit) || 100, 200);
 
       let query = `
@@ -61,6 +69,12 @@ export default async function handler(req, res) {
       return res.status(200).json({ scores: rows });
 
     } else if (req.method === 'POST') {
+      // Dedicated games_played increment
+      if (req.query.action === 'increment_played') {
+        await sql(`UPDATE stats SET value = value + 1 WHERE key = 'games_played'`);
+        return res.status(200).json({ ok: true });
+      }
+
       const { name, team, game, gameName, score } = req.body || {};
 
       // Validate input

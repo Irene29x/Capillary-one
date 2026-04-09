@@ -416,6 +416,7 @@ GAME_ENGINES.reaction = (function () {
       round: 0,
       totalRounds: 5,
       times: [],
+      cumulativeScore: 0,
       waiting: false,
       ready: false,
       flashTime: null,
@@ -471,18 +472,19 @@ GAME_ENGINES.reaction = (function () {
       const rt = performance.now() - state.flashTime;
       state.times.push(rt);
       state.round++;
-      // Compute running scaled score from rounds so far and report it
-      const runningAvg = state.times.reduce((a, b) => a + b, 0) / state.times.length;
-      let runningScore;
-      if (runningAvg <= 150) runningScore = 2500;
-      else if (runningAvg <= 200) runningScore = Math.round(2500 - (runningAvg - 150) * 20);
-      else if (runningAvg <= 300) runningScore = Math.round(1500 - (runningAvg - 200) * 10);
-      else if (runningAvg <= 500) runningScore = Math.round(500 - (runningAvg - 300) * 2);
-      else runningScore = Math.max(10, Math.round(500 - (runningAvg - 500)));
-      runningScore = Math.max(10, runningScore);
-      state.onScore(runningScore);
+      // Per-round score: <400ms → 400-600, ≥400ms → 200-350
+      let roundPts;
+      if (rt <= 400) {
+        const t = Math.max(0, Math.min(1, (rt - 150) / 250));
+        roundPts = Math.round(600 - t * 200); // 600 → 400
+      } else {
+        const t = Math.min(1, (rt - 400) / 600);
+        roundPts = Math.round(350 - t * 150); // 350 → 200
+      }
+      state.cumulativeScore += roundPts;
+      state.onScore(state.cumulativeScore);
       padEl.className = 'reaction-pad waiting';
-      labelEl.textContent = `${Math.round(rt)} ms!`;
+      labelEl.textContent = `${Math.round(rt)} ms`;
       state.ready = false;
       setTimeout(() => { if (state) startRound(); }, 900);
     }
@@ -490,16 +492,7 @@ GAME_ENGINES.reaction = (function () {
 
   function finish() {
     if (!state) return;
-    const avg = state.times.reduce((a,b) => a+b, 0) / state.times.length;
-    // Score: lower ms = higher score (max 2500 for sub-150ms avg, floors at 10)
-    let score;
-    if (avg <= 150) score = 2500;
-    else if (avg <= 200) score = Math.round(2500 - (avg - 150) * 20);
-    else if (avg <= 300) score = Math.round(1500 - (avg - 200) * 10);
-    else if (avg <= 500) score = Math.round(500 - (avg - 300) * 2);
-    else score = Math.max(10, Math.round(500 - (avg - 500)));
-    score = Math.max(10, score);
-    state.onEnd(true, score);
+    state.onEnd(true, state.cumulativeScore);
   }
 
   function destroy() {
@@ -949,6 +942,8 @@ GAME_ENGINES.dino = (function () {
   // Minimum frames between obstacles = jump duration + landing buffer
   const JUMP_FRAMES = Math.ceil(2 * Math.abs(JUMP_FORCE) / GRAVITY); // 40
   const MIN_SPAWN_GAP = JUMP_FRAMES + 10; // 50 frames — always jumpable
+  const BIRD_SCORE_THRESHOLD = 3500;
+  const DUCK_H = 22; // shorter hitbox while ducking
 
   function init(_canvas, onScore, onEnd) {
     canvas = _canvas;
@@ -960,8 +955,9 @@ GAME_ENGINES.dino = (function () {
 
     state = {
       groundY,
-      dino: { x: 60, y: groundY - BFLY_H, vy: 0, jumping: false, w: BFLY_W, h: BFLY_H },
+      dino: { x: 60, y: groundY - BFLY_H, vy: 0, jumping: false, ducking: false, w: BFLY_W, h: BFLY_H },
       obstacles: [],
+      birds: [],
       score: 0,
       frame: 0,
       speed: 4,
@@ -978,6 +974,7 @@ GAME_ENGINES.dino = (function () {
     };
 
     document.addEventListener('keydown', onKeyDino);
+    document.addEventListener('keyup', onKeyUpDino);
     canvas.addEventListener('click', jumpDino);
     canvas.addEventListener('touchstart', jumpDino);
 
@@ -988,6 +985,26 @@ GAME_ENGINES.dino = (function () {
     if (e.code === 'Space' || e.key === ' ' || e.key === 'ArrowUp' || e.key === 'w') {
       e.preventDefault();
       jumpDino();
+    }
+    if (e.key === 'ArrowDown' || e.key === 's') {
+      e.preventDefault();
+      if (state && !state.gameOver && !state.dino.jumping) {
+        state.dino.ducking = true;
+        state.dino.h = DUCK_H;
+        state.dino.y = state.groundY - DUCK_H;
+      }
+    }
+  }
+
+  function onKeyUpDino(e) {
+    if (e.key === 'ArrowDown' || e.key === 's') {
+      if (state) {
+        state.dino.ducking = false;
+        state.dino.h = BFLY_H;
+        if (!state.dino.jumping) {
+          state.dino.y = state.groundY - BFLY_H;
+        }
+      }
     }
   }
 
@@ -1048,6 +1065,30 @@ GAME_ENGINES.dino = (function () {
     spawnTree(w1 + 12);
   }
 
+  function spawnBird() {
+    // Three heights: low (jump over), mid (jump or duck), high (duck under)
+    const heights = ['low', 'mid', 'high'];
+    const h = heights[Math.floor(Math.random() * heights.length)];
+    const birdW = 40;
+    const birdH = 28;
+    let y;
+    if (h === 'low') {
+      y = state.groundY - birdH - 2; // ground level — jump over
+    } else if (h === 'mid') {
+      y = state.groundY - birdH - 40; // mid — can jump or duck
+    } else {
+      y = state.groundY - birdH - 70; // high — must duck
+    }
+    state.birds.push({
+      x: canvas.width + 20,
+      y,
+      w: birdW,
+      h: birdH,
+      wingFrame: 0,
+      scored: false,
+    });
+  }
+
   function updateSpeed() {
     const s = state.score;
     if (s >= 2500) {
@@ -1081,6 +1122,7 @@ GAME_ENGINES.dino = (function () {
       d.y = state.groundY - d.h;
       d.vy = 0;
       d.jumping = false;
+      if (d.ducking) { d.h = DUCK_H; d.y = state.groundY - DUCK_H; }
     }
 
     state.spawnTimer++;
@@ -1088,9 +1130,14 @@ GAME_ENGINES.dino = (function () {
       // Ensure the last obstacle is far enough away so the player can always jump
       const minPixelGap = MIN_SPAWN_GAP * state.speed;
       const lastObs = state.obstacles[state.obstacles.length - 1];
-      if (!lastObs || lastObs.x <= canvas.width - minPixelGap) {
+      const lastBird = state.birds[state.birds.length - 1];
+      const lastAny = Math.max(lastObs ? lastObs.x : -Infinity, lastBird ? lastBird.x : -Infinity);
+      if (lastAny <= canvas.width - minPixelGap) {
         state.spawnTimer = 0;
-        if (state.score >= 2500) {
+        // After 3500, mix birds in — ~40% chance bird, 60% tree
+        if (state.score >= BIRD_SCORE_THRESHOLD && Math.random() < 0.4) {
+          spawnBird();
+        } else if (state.score >= 2500) {
           spawnPair(); // back-to-back double tree in IMPOSSIBLE mode
         } else {
           spawnTree();
@@ -1109,6 +1156,20 @@ GAME_ENGINES.dino = (function () {
       }
     }
 
+    // Update birds
+    for (let i = state.birds.length - 1; i >= 0; i--) {
+      const b = state.birds[i];
+      b.x -= state.speed;
+      b.wingFrame++;
+      if (!b.scored && b.x + b.w < d.x) {
+        b.scored = true;
+      }
+      if (b.x + b.w < -40) {
+        state.birds.splice(i, 1);
+      }
+    }
+
+    // Collision with trees
     for (const o of state.obstacles) {
       const margin = 6;
       if (
@@ -1116,6 +1177,20 @@ GAME_ENGINES.dino = (function () {
         d.x + d.w - margin > o.x &&
         d.y + margin < o.y + o.h &&
         d.y + d.h - margin > o.y
+      ) {
+        state.gameOver = true;
+        return;
+      }
+    }
+
+    // Collision with birds
+    for (const b of state.birds) {
+      const margin = 6;
+      if (
+        d.x + margin < b.x + b.w &&
+        d.x + d.w - margin > b.x &&
+        d.y + margin < b.y + b.h &&
+        d.y + d.h - margin > b.y
       ) {
         state.gameOver = true;
         return;
@@ -1169,16 +1244,83 @@ GAME_ENGINES.dino = (function () {
       ctx.fill();
     });
 
+    // --- Draw birds (pterodactyls) ---
+    state.birds.forEach(b => {
+      const bx = b.x + b.w / 2;
+      const by = b.y + b.h / 2;
+      const wingFlap = Math.sin(b.wingFrame * 0.15) * 0.7;
+
+      ctx.save();
+      ctx.translate(bx, by);
+
+      // Glow
+      ctx.shadowColor = 'rgba(255,69,69,0.5)';
+      ctx.shadowBlur = 12;
+
+      // Body
+      ctx.fillStyle = '#ff4545';
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 14, 5, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Head
+      ctx.fillStyle = '#ff6b6b';
+      ctx.beginPath();
+      ctx.arc(14, -2, 5, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Beak
+      ctx.fillStyle = '#ffcc00';
+      ctx.beginPath();
+      ctx.moveTo(19, -3);
+      ctx.lineTo(25, -1);
+      ctx.lineTo(19, 1);
+      ctx.closePath();
+      ctx.fill();
+
+      // Eye
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(16, -3, 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#000';
+      ctx.beginPath();
+      ctx.arc(16.5, -3, 1, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.shadowBlur = 0;
+
+      // Wings
+      ctx.fillStyle = '#ff4545';
+      ctx.beginPath();
+      ctx.moveTo(-6, 0);
+      ctx.quadraticCurveTo(-2, -20 * wingFlap, 8, -16 * wingFlap);
+      ctx.lineTo(4, 0);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = '#cc3636';
+      ctx.beginPath();
+      ctx.moveTo(-6, 0);
+      ctx.quadraticCurveTo(-2, 14 * wingFlap, 8, 10 * wingFlap);
+      ctx.lineTo(4, 0);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.restore();
+    });
+
     const d = state.dino;
     state.wingAngle = Math.sin(state.frame * 0.15) * 0.5;
 
     // --- Draw butterfly ---
     const bx = d.x + d.w / 2;
-    const by = d.y + d.h / 2;
-    const wingFlap = Math.max(0.1, Math.sin(state.frame * 0.18) * 0.6 + 0.4);
+    const by = d.ducking ? d.y + d.h / 2 + 4 : d.y + d.h / 2;
+    const wingFlap = d.ducking ? 0.15 : Math.max(0.1, Math.sin(state.frame * 0.18) * 0.6 + 0.4);
 
     ctx.save();
     ctx.translate(bx, by);
+    if (d.ducking) ctx.scale(1.3, 0.6); // flatten when ducking
 
     // Glow
     ctx.shadowColor = 'rgba(168,85,247,0.6)';
@@ -1288,13 +1430,18 @@ GAME_ENGINES.dino = (function () {
 
     let speedLabel = 'Normal';
     let speedColor = '#4a9eff';
-    if (state.score >= 2500) { speedLabel = '\u2620\ufe0f IMPOSSIBLE'; speedColor = '#ff0000'; }
+    if (state.score >= 3500) { speedLabel = '\u2620\ufe0f IMPOSSIBLE + \ud83e\udd85'; speedColor = '#ff0000'; }
+    else if (state.score >= 2500) { speedLabel = '\u2620\ufe0f IMPOSSIBLE'; speedColor = '#ff0000'; }
     else if (state.score >= 1500) { speedLabel = '\ud83d\udd2e OVERLY INSANE'; speedColor = '#ff4545'; }
     else if (state.score >= 500) { speedLabel = '\u26a1 Fast'; speedColor = '#f59e0b'; }
     ctx.fillStyle = speedColor;
     ctx.textAlign = 'left';
     ctx.fillText(speedLabel, 10, 10);
-    // Win condition label removed — the game runs until collision with no cap
+    if (state.score >= BIRD_SCORE_THRESHOLD) {
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      ctx.font = '11px JetBrains Mono, monospace';
+      ctx.fillText('\u2b07 / S to duck under birds', 10, 28);
+    }
   }
 
   function drawStar(ctx, cx, cy, spikes, outerR, innerR) {
@@ -1328,11 +1475,360 @@ GAME_ENGINES.dino = (function () {
   function destroy() {
     if (animId) cancelAnimationFrame(animId);
     document.removeEventListener('keydown', onKeyDino);
+    document.removeEventListener('keyup', onKeyUpDino);
     if (canvas) {
       canvas.removeEventListener('click', jumpDino);
       canvas.removeEventListener('touchstart', jumpDino);
     }
     state = null;
+  }
+
+  return { init, destroy };
+})();
+
+
+/* ============================================================
+   7. COLOR MATCH — Memorise 5 colours, recreate them with HSB
+      sliders. Score = accuracy across all 5 colours (max 2500)
+   ============================================================ */
+GAME_ENGINES.colorMatch = (function () {
+  let state = null;
+  let container = null;
+
+  // ── Colour helpers ──────────────────────────────────────────
+  function hsbToRgb(h, s, b) {
+    s /= 100; b /= 100;
+    const k = n => (n + h / 60) % 6;
+    const f = n => b * (1 - s * Math.max(0, Math.min(k(n), 4 - k(n), 1)));
+    return [Math.round(f(5) * 255), Math.round(f(3) * 255), Math.round(f(1) * 255)];
+  }
+
+  function hsbToHex(h, s, b) {
+    const [r, g, bl] = hsbToRgb(h, s, b);
+    return '#' + [r, g, bl].map(x => x.toString(16).padStart(2, '0')).join('');
+  }
+
+  // Perceptual distance: weighted average of circular hue + Sat + Bright deltas
+  function colorError(h1, s1, b1, h2, s2, b2) {
+    const dh = Math.min(Math.abs(h1 - h2), 360 - Math.abs(h1 - h2)) / 180; // 0-1
+    const ds = Math.abs(s1 - s2) / 100;
+    const db = Math.abs(b1 - b2) / 100;
+    return (dh * 2 + ds + db) / 4; // hue weighted more — 0-1
+  }
+
+  function calcPoints(error) {
+    // 0 error → 10 pts, 0.5+ error → 0 pts
+    return Math.max(0, parseFloat((10 * Math.max(0, 1 - error / 0.5)).toFixed(1)));
+  }
+
+  function randomColor() {
+    return {
+      h: Math.floor(Math.random() * 360),
+      s: 45 + Math.floor(Math.random() * 46), // 45-90 – vivid enough to be distinct
+      b: 45 + Math.floor(Math.random() * 46), // 45-90 – not too dark or too white
+    };
+  }
+
+  // ── Phases ──────────────────────────────────────────────────
+  function showMemorize() {
+    container.innerHTML = '';
+    const idx = state.currentIdx;
+    const total = state.colors.length;
+    const c = state.colors[idx];
+
+    const titleEl = document.createElement('div');
+    titleEl.className = 'cm-phase-title';
+    titleEl.textContent = `Memorise color ${idx + 1} of ${total}`;
+
+    const swatchRow = document.createElement('div');
+    swatchRow.className = 'cm-swatch-row';
+    const sw = document.createElement('div');
+    sw.className = 'cm-swatch cm-swatch--solo';
+    sw.style.background = hsbToHex(c.h, c.s, c.b);
+    const lbl = document.createElement('span');
+    lbl.className = 'cm-swatch-num';
+    lbl.textContent = String(idx + 1);
+    sw.appendChild(lbl);
+    swatchRow.appendChild(sw);
+
+    const countEl = document.createElement('div');
+    countEl.className = 'cm-countdown';
+    state.countdown = 5;
+    countEl.textContent = state.countdown;
+
+    container.appendChild(titleEl);
+    container.appendChild(swatchRow);
+    container.appendChild(countEl);
+
+    state.countdownTimer = setInterval(() => {
+      if (!state) return;
+      state.countdown--;
+      countEl.textContent = state.countdown;
+      if (state.countdown <= 0) {
+        clearInterval(state.countdownTimer);
+        state.phase = 'guess';
+        showGuess();
+      }
+    }, 1000);
+  }
+
+  function showGuess() {
+    container.innerHTML = '';
+    const idx = state.currentIdx;
+    const total = state.colors.length;
+
+    const progEl = document.createElement('div');
+    progEl.className = 'cm-progress';
+    for (let i = 0; i < total; i++) {
+      const dot = document.createElement('div');
+      dot.className = 'cm-dot' + (i < idx ? ' done' : i === idx ? ' current' : '');
+      progEl.appendChild(dot);
+    }
+
+    const titleEl = document.createElement('div');
+    titleEl.className = 'cm-phase-title';
+    titleEl.textContent = `Recreate color ${idx + 1} of ${total}`;
+
+    const previewWrap = document.createElement('div');
+    previewWrap.className = 'cm-preview-wrap';
+
+    const blankSwatch = document.createElement('div');
+    blankSwatch.className = 'cm-swatch-blank';
+    blankSwatch.textContent = '?';
+
+    const arrowEl = document.createElement('div');
+    arrowEl.className = 'cm-arrow';
+    arrowEl.textContent = '→';
+
+    const yourSwatch = document.createElement('div');
+    yourSwatch.className = 'cm-swatch-preview';
+
+    previewWrap.appendChild(blankSwatch);
+    previewWrap.appendChild(arrowEl);
+    previewWrap.appendChild(yourSwatch);
+
+    const guess = { h: 180, s: 50, b: 50 };
+
+    function updatePreview() {
+      yourSwatch.style.background = hsbToHex(guess.h, guess.s, guess.b);
+    }
+    updatePreview();
+
+    const slidersWrap = document.createElement('div');
+    slidersWrap.className = 'cm-sliders';
+
+    [
+      { label: 'Hue',        key: 'h', min: 0,   max: 359, step: 1, hue: true },
+      { label: 'Saturation', key: 's', min: 0,   max: 100, step: 1 },
+      { label: 'Brightness', key: 'b', min: 0,   max: 100, step: 1 },
+    ].forEach(def => {
+      const row = document.createElement('div');
+      row.className = 'cm-slider-row';
+
+      const lbl = document.createElement('label');
+      lbl.className = 'cm-slider-label';
+      lbl.textContent = def.label;
+
+      const input = document.createElement('input');
+      input.type  = 'range';
+      input.className = 'cm-slider' + (def.hue ? ' cm-slider--hue' : '');
+      input.min   = def.min;
+      input.max   = def.max;
+      input.step  = def.step;
+      input.value = guess[def.key];
+
+      const valEl = document.createElement('span');
+      valEl.className = 'cm-slider-val';
+      valEl.textContent = guess[def.key];
+
+      input.addEventListener('input', () => {
+        guess[def.key] = parseInt(input.value, 10);
+        valEl.textContent = input.value;
+        updatePreview();
+      });
+
+      row.appendChild(lbl);
+      row.appendChild(input);
+      row.appendChild(valEl);
+      slidersWrap.appendChild(row);
+    });
+
+    const submitBtn = document.createElement('button');
+    submitBtn.className = 'btn-primary cm-submit';
+    submitBtn.textContent = 'Lock In →';
+    submitBtn.addEventListener('click', () => {
+      state.guesses.push({ ...guess });
+      showComparison();
+    });
+
+    container.appendChild(progEl);
+    container.appendChild(titleEl);
+    container.appendChild(previewWrap);
+    container.appendChild(slidersWrap);
+    container.appendChild(submitBtn);
+  }
+
+  function showComparison() {
+    container.innerHTML = '';
+    const idx = state.currentIdx;
+    const total = state.colors.length;
+    const orig = state.colors[idx];
+    const g = state.guesses[idx];
+    const error = colorError(orig.h, orig.s, orig.b, g.h, g.s, g.b);
+    const pts = calcPoints(error);
+    state.roundScores = state.roundScores || [];
+    state.roundScores.push(pts);
+
+    const titleEl = document.createElement('div');
+    titleEl.className = 'cm-phase-title';
+    titleEl.textContent = `Color ${idx + 1} of ${total} — Result`;
+
+    const compWrap = document.createElement('div');
+    compWrap.className = 'cm-compare-wrap';
+
+    const origCol = document.createElement('div');
+    origCol.className = 'cm-compare-col';
+    const origSw = document.createElement('div');
+    origSw.className = 'cm-compare-swatch';
+    origSw.style.background = hsbToHex(orig.h, orig.s, orig.b);
+    const origLbl = document.createElement('div');
+    origLbl.className = 'cm-compare-label';
+    origLbl.textContent = 'Original';
+    origCol.appendChild(origSw);
+    origCol.appendChild(origLbl);
+
+    const vsEl = document.createElement('div');
+    vsEl.className = 'cm-compare-vs';
+    vsEl.textContent = 'vs';
+
+    const guessCol = document.createElement('div');
+    guessCol.className = 'cm-compare-col';
+    const guessSw = document.createElement('div');
+    guessSw.className = 'cm-compare-swatch';
+    guessSw.style.background = hsbToHex(g.h, g.s, g.b);
+    const guessLbl = document.createElement('div');
+    guessLbl.className = 'cm-compare-label';
+    guessLbl.textContent = 'Your Guess';
+    guessCol.appendChild(guessSw);
+    guessCol.appendChild(guessLbl);
+
+    compWrap.appendChild(origCol);
+    compWrap.appendChild(vsEl);
+    compWrap.appendChild(guessCol);
+
+    const ptsEl = document.createElement('div');
+    ptsEl.className = 'cm-compare-score' + (pts >= 9 ? ' perfect' : pts >= 5 ? ' good' : '');
+    ptsEl.textContent = `${pts.toFixed(1)} / 10`;
+
+    const nextBtn = document.createElement('button');
+    nextBtn.className = 'btn-primary cm-submit';
+    nextBtn.textContent = idx < total - 1 ? 'Next Color →' : 'See Final Results →';
+    nextBtn.addEventListener('click', () => {
+      state.currentIdx++;
+      if (state.currentIdx >= total) {
+        state.phase = 'results';
+        showResults();
+      } else {
+        state.phase = 'memorize';
+        showMemorize();
+      }
+    });
+
+    container.appendChild(titleEl);
+    container.appendChild(compWrap);
+    container.appendChild(ptsEl);
+    container.appendChild(nextBtn);
+  }
+
+  function showResults() {
+    container.innerHTML = '';
+
+    const titleEl = document.createElement('div');
+    titleEl.className = 'cm-phase-title';
+    titleEl.textContent = 'Results';
+
+    const resultsGrid = document.createElement('div');
+    resultsGrid.className = 'cm-results-grid';
+
+    let total = 0;
+    state.colors.forEach((orig, i) => {
+      const g = state.guesses[i];
+      const error = colorError(orig.h, orig.s, orig.b, g.h, g.s, g.b);
+      const pts = calcPoints(error);
+      total += pts;
+
+      const row = document.createElement('div');
+      row.className = 'cm-result-row';
+
+      const numEl = document.createElement('span');
+      numEl.className = 'cm-result-num';
+      numEl.textContent = `#${i + 1}`;
+
+      const origSw = document.createElement('div');
+      origSw.className = 'cm-result-swatch';
+      origSw.style.background = hsbToHex(orig.h, orig.s, orig.b);
+      origSw.title = 'Original';
+
+      const guessSw = document.createElement('div');
+      guessSw.className = 'cm-result-swatch cm-result-swatch--guess';
+      guessSw.style.background = hsbToHex(g.h, g.s, g.b);
+      guessSw.title = 'Your guess';
+
+      const ptsEl = document.createElement('span');
+      ptsEl.className = 'cm-result-pts' + (pts >= 9 ? ' perfect' : pts >= 5 ? ' good' : '');
+      ptsEl.textContent = pts.toFixed(1) + '/10';
+
+      row.appendChild(numEl);
+      row.appendChild(origSw);
+      row.appendChild(guessSw);
+      row.appendChild(ptsEl);
+      resultsGrid.appendChild(row);
+    });
+
+    const scaledScore = Math.round((total / 50) * 2500);
+
+    const totalEl = document.createElement('div');
+    totalEl.className = 'cm-total';
+    totalEl.innerHTML = `Total: <span class="cm-total-val">${total.toFixed(1)}</span>/50`;
+
+    container.appendChild(titleEl);
+    container.appendChild(resultsGrid);
+    container.appendChild(totalEl);
+
+    state.onScore(scaledScore);
+    state.onEnd(true, scaledScore);
+  }
+
+  // ── Lifecycle ────────────────────────────────────────────────
+  function init(_canvas, onScore, onEnd) {
+    const wrap = document.getElementById('game-canvas-wrap');
+    document.getElementById('game-canvas').style.display = 'none';
+
+    container = document.createElement('div');
+    container.className = 'cm-area';
+    wrap.appendChild(container);
+
+    state = {
+      colors: Array.from({ length: 5 }, randomColor),
+      guesses: [],
+      roundScores: [],
+      currentIdx: 0,
+      phase: 'memorize',
+      countdown: 5,
+      countdownTimer: null,
+      onScore,
+      onEnd,
+    };
+
+    showMemorize();
+  }
+
+  function destroy() {
+    if (state && state.countdownTimer) clearInterval(state.countdownTimer);
+    if (container && container.parentNode) container.parentNode.removeChild(container);
+    document.getElementById('game-canvas').style.display = 'block';
+    state = null;
+    container = null;
   }
 
   return { init, destroy };
