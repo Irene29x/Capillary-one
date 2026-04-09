@@ -31,9 +31,9 @@ const GAMES_META = {
   reaction: {
     name: 'Trigger Time',
     icon: '⚡',
-    desc: 'Wait for the flash, click as fast as you can. 5 rounds — your average reaction time determines your rank.',
+    desc: 'Wait for the flash, click as fast as you can. 5 rounds — faster reactions earn more points each round.',
     controls: 'Click anywhere — react on green flash',
-    scoreLabel: 'Reaction Speed',
+    scoreLabel: 'Score',
   },
   memory: {
     name: 'Match Matrix',
@@ -651,7 +651,7 @@ function showGameOver(won, score) {
   const meta = GAMES_META[State.currentGame];
   let sub = '';
   if (State.currentGame === 'reaction' && won) {
-    sub = 'Lower is better for reaction time!';
+    sub = 'Faster reactions earn more points each round.';
   }
   $('go-sub').textContent = sub;
 
